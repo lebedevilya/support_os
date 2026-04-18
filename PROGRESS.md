@@ -36,7 +36,7 @@ The core runtime is already in place:
 - `SupportPipeline` orchestrates triage, specialist handling, ticket updates, trace storage, and outbound messages
 - `Agents::TriageAgent` exists
 - `Agents::SpecialistAgent` exists
-- `LLM::Client` exists and can call the OpenAI Responses API when credentials are present
+- `LLM::Client` now uses `ruby_llm` as the model adapter while preserving the app-level workflow API
 - fallback heuristic behavior exists when no LLM client is available
 - triage can now answer FAQ-style questions directly from company public knowledge chunks
 - text-only public page import and chunking services now exist
@@ -78,7 +78,7 @@ Seed data already includes:
 The test suite passes under the correct Ruby environment:
 
 - command: `rbenv exec bundle exec bin/rails test`
-- result: `12 runs, 90 assertions, 0 failures, 0 errors, 0 skips`
+- result: `13 runs, 100 assertions, 0 failures, 0 errors, 0 skips`
 
 ## What Matches The Plan
 
@@ -153,7 +153,6 @@ Current problem:
 
 - the public knowledge route exists in app code
 - but MotorAdmin is not wired yet
-- `LLM::Client` still uses the hand-rolled HTTP adapter rather than `ruby_llm`
 
 Why it matters:
 
@@ -235,21 +234,20 @@ Expected outcome:
 
 - the happy-path walkthrough becomes obvious and repeatable
 
-### Step 5. Wire MotorAdmin and optionally migrate the LLM adapter
+### Step 5. Wire MotorAdmin
 
 Goal:
 
-- finish the admin and provider plumbing without changing the current workflow ownership
+- finish the admin side without changing the current workflow ownership
 
 Changes:
 
 - expose `Knowledge::Source`, `Knowledge::ManualEntry`, and `Knowledge::Chunk`
 - add a manual import action if needed
-- optionally replace the current HTTP client internals with a `ruby_llm` wrapper
 
 Expected outcome:
 
-- cleaner demo operations story and less custom transport code
+- cleaner demo operations story
 
 ## Suggested Immediate Execution Plan
 
@@ -280,6 +278,7 @@ These are the main files to inspect first next session:
 - `app/services/public_knowledge/importer.rb`
 - `app/services/public_knowledge/chunker.rb`
 - `app/services/public_knowledge/retriever.rb`
+- `app/services/llm/client.rb`
 - `app/views/home/index.html.erb`
 - `app/views/widget/tickets/new.html.erb`
 - `app/views/widget/tickets/_form.html.erb`
