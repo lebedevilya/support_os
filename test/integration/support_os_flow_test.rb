@@ -1,5 +1,6 @@
 require "test_helper"
 require Rails.root.join("app/services/llm/client")
+require "ostruct"
 
 class SupportOsFlowTest < ActionDispatch::IntegrationTest
   test "overview page renders support os framing" do
@@ -73,5 +74,37 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_equal 2, ticket.agent_runs.count
     assert_equal 1, ticket.tool_calls.count
     assert_select "textarea[name='message[content]'][data-action='keydown->enter-submit#submitOnEnter']"
+  end
+
+  test "motor admin is protected by basic auth backed by rails credentials" do
+    with_stubbed_credentials(nil, "motor-user", "motor-pass") do
+      get "/admin"
+      assert_response :unauthorized
+
+      auth = ActionController::HttpAuthentication::Basic.encode_credentials("motor-user", "motor-pass")
+      get "/admin", headers: { "Authorization" => auth }
+
+      assert_not_equal 401, response.status
+    end
+  end
+
+  private
+
+  def with_stubbed_credentials(open_ai_key, motor_username = nil, motor_password = nil)
+    application = Rails.application
+    original_method = application.method(:credentials)
+
+    application.singleton_class.define_method(:credentials) do
+      OpenStruct.new(
+        open_ai: OpenStruct.new(api_key: open_ai_key),
+        motor_admin: OpenStruct.new(username: motor_username, password: motor_password)
+      )
+    end
+
+    yield
+  ensure
+    application.singleton_class.define_method(:credentials) do
+      original_method.call
+    end
   end
 end

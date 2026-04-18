@@ -40,6 +40,7 @@ The core runtime is already in place:
 - fallback heuristic behavior exists when no LLM client is available
 - triage can now answer FAQ-style questions directly from company public knowledge chunks
 - text-only public page import and chunking services now exist
+- MotorAdmin is mounted at `/admin` behind HTTP Basic auth backed by `motor_admin.username` and `motor_admin.password` in Rails credentials
 
 ### Implemented data model
 
@@ -78,7 +79,7 @@ Seed data already includes:
 The test suite passes under the correct Ruby environment:
 
 - command: `rbenv exec bundle exec bin/rails test`
-- result: `13 runs, 100 assertions, 0 failures, 0 errors, 0 skips`
+- result: `14 runs, 102 assertions, 0 failures, 0 errors, 0 skips`
 
 ## What Matches The Plan
 
@@ -147,16 +148,17 @@ Why it matters:
 - the assignment asked for curated demo prompts
 - guided prompts make the walkthrough reliable under time pressure
 
-### 5. Admin and adapter work is still incomplete
+### 5. Admin surface still needs curation
 
 Current problem:
 
 - the public knowledge route exists in app code
-- but MotorAdmin is not wired yet
+- MotorAdmin is mounted and protected
+- but the admin experience has not been curated for the `Knowledge::` models yet
 
 Why it matters:
 
-- the architecture is ahead of the back-office tooling
+- the back-office exists, but it is still generic rather than demo-focused
 
 ## Recommended Next Steps
 
@@ -234,11 +236,11 @@ Expected outcome:
 
 - the happy-path walkthrough becomes obvious and repeatable
 
-### Step 5. Wire MotorAdmin
+### Step 5. Curate MotorAdmin for the knowledge workflow
 
 Goal:
 
-- finish the admin side without changing the current workflow ownership
+- make the admin side useful for the demo instead of merely present
 
 Changes:
 
@@ -247,7 +249,7 @@ Changes:
 
 Expected outcome:
 
-- cleaner demo operations story
+- cleaner demo operations story and less clicking around irrelevant engine defaults
 
 ## Suggested Immediate Execution Plan
 
@@ -262,7 +264,7 @@ If resuming next session, start here:
 7. Update `app/views/tickets/show.html.erb`
 8. Update `app/views/traces/show.html.erb`
 9. Add guided prompt UI to the widget views
-10. Wire MotorAdmin if dependency install is allowed
+10. Configure MotorAdmin around the `Knowledge::` models
 11. Run `rbenv exec bundle exec bin/rails test`
 
 ## Key Files
@@ -279,6 +281,8 @@ These are the main files to inspect first next session:
 - `app/services/public_knowledge/chunker.rb`
 - `app/services/public_knowledge/retriever.rb`
 - `app/services/llm/client.rb`
+- `config/routes.rb`
+- `config/initializers/inflections.rb`
 - `app/views/home/index.html.erb`
 - `app/views/widget/tickets/new.html.erb`
 - `app/views/widget/tickets/_form.html.erb`
