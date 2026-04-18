@@ -26,6 +26,7 @@ class SupportPipeline
     )
 
     return escalate!(triage_result) if triage_result[:route] == "escalate"
+    return create_knowledge_answer!(triage_result) if triage_result[:route] == "knowledge_answer"
 
     specialist_result = Agents::SpecialistAgent.new(ticket: @ticket, triage_result: triage_result, llm_client: @llm_client).call
     create_agent_run("SpecialistAgent", specialist_result)
@@ -93,5 +94,10 @@ class SupportPipeline
     content = specialist_result[:reply].presence || specialist_result[:handoff_note]
 
     @ticket.messages.create!(role: role, content: content)
+  end
+
+  def create_knowledge_answer!(triage_result)
+    @ticket.messages.create!(role: "assistant", content: triage_result.fetch(:reply))
+    triage_result
   end
 end

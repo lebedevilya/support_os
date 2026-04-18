@@ -6,7 +6,7 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     get root_path
 
     assert_response :success
-    assert_includes response.body, "SupportOS"
+    assert_includes response.body, "Support_OS"
     assert_includes response.body, "portfolio-wide support operating system"
     assert_includes response.body, "AI Passport Photo"
     assert_includes response.body, "nodes.garden"

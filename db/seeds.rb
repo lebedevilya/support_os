@@ -77,6 +77,70 @@ end
 [
   {
     company: aipassportphoto,
+    url: "https://www.aipassportphoto.co/",
+    title: "Homepage",
+    source_kind: "website_page",
+    extracted_text: "Under 60 seconds. Upload your photo, our AI processes it instantly, and you can download or print your compliant passport photo right away. Passport and visa photos for Canada, the US, the UK, India, Schengen, and Australia."
+  },
+  {
+    company: aipassportphoto,
+    url: "https://www.aipassportphoto.co/guarantee",
+    title: "Guarantee",
+    source_kind: "website_page",
+    extracted_text: "Money-back guarantee applies when the final photo does not meet the supported document standards. Embassy or government rejection disputes may require manual review."
+  },
+  {
+    company: aipassportphoto,
+    url: "https://www.aipassportphoto.co/privacy",
+    title: "Privacy",
+    source_kind: "website_page",
+    extracted_text: "Uploaded photos are deleted after 30 days unless a customer asks for earlier deletion."
+  },
+  {
+    company: aipassportphoto,
+    url: "https://www.aipassportphoto.co/contact",
+    title: "Contact",
+    source_kind: "website_page",
+    extracted_text: "Contact support at help@aipassportphoto.co for questions that require manual assistance."
+  },
+  {
+    company: nodes_garden,
+    url: "https://www.nodes.garden/",
+    title: "Homepage",
+    source_kind: "website_page",
+    extracted_text: "nodes.garden helps teams deploy and operate nodes with clear provisioning and health visibility. Provisioning can take time while infrastructure boots and the node catches up to chain state."
+  },
+  {
+    company: nodes_garden,
+    url: "https://www.nodes.garden/contact",
+    title: "Contact",
+    source_kind: "website_page",
+    extracted_text: "Contact support at support@nodes.garden when deployment issues require manual review."
+  }
+].each do |attributes|
+  source = Knowledge::Source.create!(
+    company: attributes[:company],
+    url: attributes[:url],
+    title: attributes[:title],
+    source_kind: attributes[:source_kind],
+    status: "imported",
+    imported_at: Time.current,
+    extracted_text: attributes[:extracted_text]
+  )
+
+  PublicKnowledge::Chunker.new(text: source.extracted_text).call.each_with_index do |chunk, index|
+    source.chunks.create!(
+      company: source.company,
+      content: chunk,
+      position: index,
+      token_estimate: (chunk.split.size * 1.3).ceil
+    )
+  end
+end
+
+[
+  {
+    company: aipassportphoto,
     record_type: "photo_request",
     external_id: "APP-1001",
     customer_email: "anna@example.com",
@@ -145,6 +209,12 @@ seed_ticket!(
   company: aipassportphoto,
   email: "review@example.com",
   content: "Do you support Canada passport photos?"
+)
+
+seed_ticket!(
+  company: aipassportphoto,
+  email: "timing@example.com",
+  content: "How long does it take?"
 )
 
 seed_ticket!(

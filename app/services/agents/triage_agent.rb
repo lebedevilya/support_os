@@ -6,6 +6,9 @@ module Agents
     end
 
     def call
+      knowledge_result = knowledge_answer
+      return knowledge_result if knowledge_result
+
       return llm_triage if @llm_client
 
       content = latest_message.content.downcase
@@ -84,6 +87,27 @@ module Agents
 
     private
 
+    def knowledge_answer
+      chunks = PublicKnowledge::Retriever.new(company: @ticket.company, query: latest_message.content).call
+      return if chunks.empty?
+
+      best_chunk = chunks.first
+
+      {
+        source: "public_knowledge",
+        status: "resolved",
+        category: "policy",
+        priority: "normal",
+        route: "knowledge_answer",
+        current_layer: "triage",
+        confidence: 0.9,
+        decision: "knowledge_answer",
+        reply: best_chunk.content,
+        reasoning_summary: "Answered directly from company public knowledge.",
+        input_snapshot: latest_message.content
+      }
+    end
+
     def llm_triage
       response = @llm_client.complete_json(
         task: "triage",
@@ -92,9 +116,10 @@ module Agents
           Return keys:
           - category: one of billing, delivery, refund, policy, account, technical, other
           - priority: one of low, normal, high
-          - route: specialist or escalate
+          - route: knowledge_answer, specialist, or escalate
           - confidence: decimal between 0 and 1
           - needs_human_now: boolean
+          - reply: optional string when route is knowledge_answer
           - reasoning_summary: short sentence
           If the request mentions embassy rejection, government rejection, or a disputed refund, route to escalate.
         PROMPT
@@ -125,17 +150,25 @@ module Agents
     end
 
     def build_llm_result(response)
-      route = response[:needs_human_now] || response[:route].to_s == "escalate" ? "escalate" : "specialist"
+      route =
+        if response[:needs_human_now] || response[:route].to_s == "escalate"
+          "escalate"
+        elsif response[:route].to_s == "knowledge_answer"
+          "knowledge_answer"
+        else
+          "specialist"
+        end
 
       {
         source: "llm",
-        status: route == "escalate" ? "escalated" : "in_progress",
+        status: route == "escalate" ? "escalated" : (route == "knowledge_answer" ? "resolved" : "in_progress"),
         category: normalized_category(response[:category]),
         priority: normalized_priority(response[:priority]),
         route: route,
-        current_layer: route == "escalate" ? "human" : "specialist",
+        current_layer: route == "escalate" ? "human" : (route == "knowledge_answer" ? "triage" : "specialist"),
         confidence: numeric_confidence(response[:confidence]),
-        decision: route == "escalate" ? "escalate" : "triage",
+        decision: route == "escalate" ? "escalate" : (route == "knowledge_answer" ? "knowledge_answer" : "triage"),
+        reply: response[:reply],
         escalation_reason: (route == "escalate" ? "The request requires human review." : nil),
         handoff_note: (route == "escalate" ? "Escalated for human review based on the triage decision." : nil),
         reasoning_summary: response[:reasoning_summary].presence || "Triage completed.",

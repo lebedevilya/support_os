@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_18_120700) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_18_121000) do
   create_table "agent_runs", force: :cascade do |t|
     t.string "agent_name", null: false
     t.decimal "confidence", precision: 4, scale: 2
@@ -67,6 +67,30 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_18_120700) do
     t.index ["company_id"], name: "index_knowledge_articles_on_company_id"
   end
 
+  create_table "knowledge_chunks", force: :cascade do |t|
+    t.integer "company_id", null: false
+    t.text "content", null: false
+    t.datetime "created_at", null: false
+    t.integer "manual_knowledge_entry_id"
+    t.integer "position", default: 0, null: false
+    t.integer "public_knowledge_source_id"
+    t.integer "token_estimate", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id"], name: "index_knowledge_chunks_on_company_id"
+    t.index ["manual_knowledge_entry_id"], name: "index_knowledge_chunks_on_manual_knowledge_entry_id"
+    t.index ["public_knowledge_source_id"], name: "index_knowledge_chunks_on_public_knowledge_source_id"
+  end
+
+  create_table "manual_knowledge_entries", force: :cascade do |t|
+    t.integer "company_id", null: false
+    t.text "content", null: false
+    t.datetime "created_at", null: false
+    t.string "status", default: "active", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id"], name: "index_manual_knowledge_entries_on_company_id"
+  end
+
   create_table "messages", force: :cascade do |t|
     t.text "content", null: false
     t.datetime "created_at", null: false
@@ -74,6 +98,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_18_120700) do
     t.integer "ticket_id", null: false
     t.datetime "updated_at", null: false
     t.index ["ticket_id"], name: "index_messages_on_ticket_id"
+  end
+
+  create_table "public_knowledge_sources", force: :cascade do |t|
+    t.integer "company_id", null: false
+    t.datetime "created_at", null: false
+    t.text "extracted_text"
+    t.datetime "imported_at"
+    t.text "last_error"
+    t.string "source_kind", null: false
+    t.string "status", default: "pending", null: false
+    t.string "title"
+    t.datetime "updated_at", null: false
+    t.string "url", null: false
+    t.index ["company_id"], name: "index_public_knowledge_sources_on_company_id"
   end
 
   create_table "tickets", force: :cascade do |t|
@@ -110,7 +148,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_18_120700) do
   add_foreign_key "agent_runs", "tickets"
   add_foreign_key "business_records", "companies"
   add_foreign_key "knowledge_articles", "companies"
+  add_foreign_key "knowledge_chunks", "companies"
+  add_foreign_key "knowledge_chunks", "manual_knowledge_entries"
+  add_foreign_key "knowledge_chunks", "public_knowledge_sources"
+  add_foreign_key "manual_knowledge_entries", "companies"
   add_foreign_key "messages", "tickets"
+  add_foreign_key "public_knowledge_sources", "companies"
   add_foreign_key "tickets", "companies"
   add_foreign_key "tickets", "customers"
   add_foreign_key "tool_calls", "agent_runs"
