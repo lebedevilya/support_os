@@ -1,0 +1,26 @@
+<div class="mx-auto max-w-5xl space-y-10">
+  <section class="space-y-4">
+    <p class="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">SupportOS</p>
+    <h1 class="text-4xl font-bold tracking-tight text-slate-900">portfolio-wide support operating system</h1>
+    <p class="max-w-3xl text-lg text-slate-600">
+      One support platform for multiple startups, with ticket-backed conversations, bounded AI handling,
+      and human fallback only when automation is not reliable enough.
+    </p>
+  </section>
+
+  <section class="grid gap-4 md:grid-cols-2">
+    <% @companies.each do |company| %>
+      <article class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Demo Company</p>
+        <h2 class="mt-2 text-2xl font-semibold text-slate-900"><%= company.name %></h2>
+        <p class="mt-2 text-sm leading-6 text-slate-600"><%= company.description %></p>
+      </article>
+    <% end %>
+  </section>
+
+  <section class="flex flex-wrap gap-3">
+    <%= link_to "Open support widget", new_widget_ticket_path, class: "rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white" %>
+    <%= link_to "View support inbox", tickets_path, class: "rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900" %>
+    <%= link_to "View trace example", @trace_ticket ? ticket_trace_path(@trace_ticket) : tickets_path, class: "rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900" %>
+  </section>
+</div>

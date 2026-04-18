@@ -1,0 +1,33 @@
+<div class="mx-auto w-full max-w-6xl space-y-6">
+  <div>
+    <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Internal Inbox</p>
+    <h1 class="text-3xl font-bold tracking-tight text-slate-900">Support tickets</h1>
+  </div>
+
+  <div class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+    <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+      <thead class="bg-slate-50">
+        <tr>
+          <th class="px-4 py-3 font-semibold text-slate-700">Ticket</th>
+          <th class="px-4 py-3 font-semibold text-slate-700">Company</th>
+          <th class="px-4 py-3 font-semibold text-slate-700">Customer</th>
+          <th class="px-4 py-3 font-semibold text-slate-700">Status</th>
+          <th class="px-4 py-3 font-semibold text-slate-700">Layer</th>
+          <th class="px-4 py-3 font-semibold text-slate-700">Updated</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        <% @tickets.each do |ticket| %>
+          <tr>
+            <td class="px-4 py-3"><%= link_to "##{ticket.id}", ticket_path(ticket), class: "font-semibold text-slate-900" %></td>
+            <td class="px-4 py-3"><%= ticket.company.name %></td>
+            <td class="px-4 py-3"><%= ticket.customer.email %></td>
+            <td class="px-4 py-3"><%= ticket.status %></td>
+            <td class="px-4 py-3"><%= ticket.current_layer %></td>
+            <td class="px-4 py-3 text-slate-500"><%= ticket.updated_at.to_fs(:short) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+</div>

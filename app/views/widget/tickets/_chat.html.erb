@@ -1,0 +1,12 @@
+<div class="space-y-6">
+  <div class="space-y-3">
+    <% ticket.messages.order(:created_at).each do |message| %>
+      <%= render "message", message: message %>
+    <% end %>
+  </div>
+
+  <%= form_with url: widget_ticket_messages_path(ticket), scope: :message, class: "space-y-3", data: { turbo: false } do |form| %>
+    <%= form.text_area :content, rows: 4, class: "block w-full rounded-2xl border border-slate-300 px-4 py-3", data: { controller: "enter-submit", action: "keydown->enter-submit#submitOnEnter" } %>
+    <%= form.submit "Send follow-up", class: "rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900" %>
+  <% end %>
+</div>
