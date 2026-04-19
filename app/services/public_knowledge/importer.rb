@@ -1,8 +1,9 @@
 module PublicKnowledge
   class Importer
-    def initialize(source:, html: nil)
+    def initialize(source:, html: nil, fetcher: nil)
       @source = source
       @html = html
+      @fetcher = fetcher
     end
 
     def call
@@ -38,12 +39,24 @@ module PublicKnowledge
 
     def fetch_html
       return @html if @html.present?
+      return @fetcher.call(@source.url) if @fetcher
 
       URI.parse(@source.url).open.read
     end
 
     def extract_text(html)
-      text = ActionView::Base.full_sanitizer.sanitize(html.to_s)
+      document = Nokogiri::HTML.parse(html.to_s)
+      root = document.at("body") || document
+
+      root.css("script, style, noscript, template, svg, iframe").remove
+      root.css("[aria-hidden='true']").remove
+      root.css("[hidden]").each do |node|
+        next if node["id"].to_s.match?(/\AS:\d+\z/)
+
+        node.remove
+      end
+
+      text = ActionView::Base.full_sanitizer.sanitize(root.to_html)
       text.gsub(/[[:space:]]+/, " ").strip
     end
 
