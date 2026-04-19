@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_18_155102) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_19_153207) do
   create_table "agent_runs", force: :cascade do |t|
     t.string "agent_name", null: false
     t.decimal "confidence", precision: 4, scale: 2
@@ -307,6 +307,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_18_155102) do
     t.index ["company_id"], name: "index_public_knowledge_sources_on_company_id"
   end
 
+  create_table "support_rules", force: :cascade do |t|
+    t.boolean "active", default: true, null: false
+    t.string "category", null: false
+    t.integer "company_id"
+    t.decimal "confidence", precision: 4, scale: 2, default: "0.9", null: false
+    t.datetime "created_at", null: false
+    t.text "escalation_reason"
+    t.text "handoff_note"
+    t.string "match_type", null: false
+    t.string "name", null: false
+    t.integer "priority", default: 100, null: false
+    t.string "priority_level", default: "normal", null: false
+    t.text "reasoning_summary", null: false
+    t.string "route", null: false
+    t.text "terms", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "active", "priority"], name: "index_support_rules_on_company_id_and_active_and_priority"
+    t.index ["company_id"], name: "index_support_rules_on_company_id"
+  end
+
   create_table "tickets", force: :cascade do |t|
     t.string "category"
     t.string "channel", null: false
@@ -352,6 +372,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_18_155102) do
   add_foreign_key "motor_note_tag_tags", "motor_notes", column: "note_id"
   add_foreign_key "motor_taggable_tags", "motor_tags", column: "tag_id"
   add_foreign_key "public_knowledge_sources", "companies"
+  add_foreign_key "support_rules", "companies"
   add_foreign_key "tickets", "companies"
   add_foreign_key "tickets", "customers"
   add_foreign_key "tool_calls", "agent_runs"

@@ -41,11 +41,19 @@ class SupportPipelineTest < ActiveSupport::TestCase
   end
 
   test "escalates an embassy refund dispute to human" do
-    KnowledgeArticle.create!(
-      company: @company,
-      title: "Refund Policy",
+    SupportRule.create!(
+      name: "Embassy refund dispute",
+      active: true,
+      priority: 10,
+      match_type: "all_terms",
+      terms: "embassy\nrefund",
+      route: "escalate",
       category: "refund",
-      content: "Embassy or government rejection disputes require human review before any refund decision."
+      priority_level: "high",
+      confidence: 0.92,
+      reasoning_summary: "Embassy rejection disputes require human review.",
+      escalation_reason: "Refund dispute requires human review.",
+      handoff_note: "Escalated for human review because the customer reports an embassy rejection dispute."
     )
 
     ticket = @company.tickets.create!(
@@ -67,6 +75,7 @@ class SupportPipelineTest < ActiveSupport::TestCase
     assert_equal "human", ticket.messages.order(:created_at).last.role
     assert_includes ticket.escalation_reason, "human review"
     assert_includes ticket.handoff_note, "embassy"
+    assert_equal "support_rule", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
   end
 
   test "resolves a nodes garden provisioning status question from a deployment record" do

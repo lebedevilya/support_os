@@ -4,6 +4,7 @@ Message.delete_all
 Ticket.delete_all
 BusinessRecord.delete_all
 KnowledgeArticle.delete_all
+SupportRule.delete_all
 Customer.delete_all
 Company.delete_all
 
@@ -20,6 +21,25 @@ nodes_garden = Company.create!(
   description: "Node deployment, provisioning, and status support.",
   support_email: "support@nodes.garden"
 )
+
+[
+  {
+    name: "Embassy refund dispute",
+    active: true,
+    priority: 10,
+    match_type: "all_terms",
+    terms: "embassy\nrefund",
+    route: "escalate",
+    category: "refund",
+    priority_level: "high",
+    confidence: 0.92,
+    reasoning_summary: "Embassy or government rejection disputes require human review.",
+    escalation_reason: "Refund dispute requires human review.",
+    handoff_note: "Escalated for human review because the customer reports an embassy rejection dispute."
+  }
+].each do |attributes|
+  SupportRule.create!(attributes)
+end
 
 [
   {

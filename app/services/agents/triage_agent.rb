@@ -6,6 +6,9 @@ module Agents
     end
 
     def call
+      rule_result = matched_support_rule_result
+      return rule_result if rule_result
+
       knowledge_result = knowledge_answer
       return knowledge_result if knowledge_result
 
@@ -13,22 +16,7 @@ module Agents
 
       content = latest_message.content.downcase
 
-      if embassy_refund?(content)
-        {
-          source: "fallback",
-          status: "escalated",
-          category: "refund",
-          priority: "high",
-          route: "escalate",
-          current_layer: "human",
-          confidence: 0.92,
-          decision: "escalate",
-          escalation_reason: "Refund dispute requires human review.",
-          handoff_note: "Escalated for human review because the customer reports an embassy rejection dispute.",
-          reasoning_summary: "Embassy rejection disputes should not be auto-resolved.",
-          input_snapshot: latest_message.content
-        }
-      elsif supported_country?(content)
+      if supported_country?(content)
         {
           source: "fallback",
           status: "in_progress",
@@ -86,6 +74,13 @@ module Agents
     end
 
     private
+
+    def matched_support_rule_result
+      match = SupportRuleMatcher.new(company: @ticket.company, content: latest_message.content).call
+      return unless match
+
+      match.attributes.merge(input_snapshot: latest_message.content)
+    end
 
     def knowledge_answer
       chunks = PublicKnowledge::Retriever.new(company: @ticket.company, query: latest_message.content).call
@@ -196,11 +191,7 @@ module Agents
       number = value.to_f
       return 0.0 if number.nan?
 
-      [[ number, 0.0 ].max, 1.0].min
-    end
-
-    def embassy_refund?(content)
-      content.include?("embassy") && content.include?("refund")
+      [ [ number, 0.0 ].max, 1.0 ].min
     end
 
     def supported_country?(content)
