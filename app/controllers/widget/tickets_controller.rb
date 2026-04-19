@@ -14,12 +14,14 @@ module Widget
           customer: customer,
           status: "new",
           channel: "widget",
-          current_layer: "triage"
+          current_layer: "triage",
+          processing: true
         )
 
         @ticket.messages.create!(role: "user", content: ticket_params[:content])
-        SupportPipeline.new(ticket: @ticket).call
       end
+
+      SupportPipelineJob.perform_later(@ticket.id)
 
       render :create, status: :ok
     end

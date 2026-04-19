@@ -1,0 +1,49 @@
+require "test_helper"
+
+class SupportPipelineJobTest < ActiveJob::TestCase
+  test "processes the ticket, clears processing, and appends the assistant reply" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "anna@example.com")
+
+    BusinessRecord.create!(
+      company: company,
+      record_type: "photo_request",
+      external_id: "APP-1001",
+      customer_email: "anna@example.com",
+      status: "completed",
+      payload: {}
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage",
+      processing: true
+    )
+    ticket.messages.create!(role: "user", content: "I paid but did not receive my file")
+
+    original_builder = LLM::Client.method(:build_from_env)
+    LLM::Client.singleton_class.define_method(:build_from_env) { nil }
+
+    begin
+      SupportPipelineJob.perform_now(ticket.id)
+    ensure
+      LLM::Client.singleton_class.define_method(:build_from_env) do
+        original_builder.call
+      end
+    end
+
+    ticket.reload
+
+    assert_equal false, ticket.processing
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal [ "user", "assistant" ], ticket.messages.order(:created_at).pluck(:role)
+    assert_equal 2, ticket.agent_runs.count
+  end
+end

@@ -11,4 +11,13 @@ class Ticket < ApplicationRecord
   }
 
   validates :status, :channel, :current_layer, presence: true
+
+  def broadcast_chat_update!
+    broadcast_replace_to(
+      self,
+      target: ActionView::RecordIdentifier.dom_id(self, :chat),
+      partial: "widget/tickets/chat",
+      locals: { ticket: self }
+    )
+  end
 end

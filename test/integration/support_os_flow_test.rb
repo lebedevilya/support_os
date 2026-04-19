@@ -3,6 +3,8 @@ require Rails.root.join("app/services/llm/client")
 require "ostruct"
 
 class SupportOsFlowTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   test "overview page renders support os framing" do
     get root_path
 
@@ -43,16 +45,19 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
 
     LLM::Client.singleton_class.define_method(:build_from_env) { nil }
     begin
+      clear_enqueued_jobs
       assert_difference "Customer.count", 1 do
         assert_difference "Ticket.count", 1 do
-          assert_difference "Message.count", 2 do
-            post widget_tickets_path, params: {
-              ticket: {
-                company_id: company.id,
-                email: "anna@example.com",
-                content: "I paid but did not receive my file"
+          assert_difference "Message.count", 1 do
+            assert_enqueued_with(job: SupportPipelineJob) do
+              post widget_tickets_path, params: {
+                ticket: {
+                  company_id: company.id,
+                  email: "anna@example.com",
+                  content: "I paid but did not receive my file"
+                }
               }
-            }
+            end
           end
         end
       end
@@ -68,13 +73,44 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_equal company, ticket.company
     assert_equal "anna@example.com", ticket.customer.email
     assert_equal "widget", ticket.channel
-    assert_equal "awaiting_customer", ticket.status
-    assert_equal [ "user", "assistant" ], ticket.messages.order(:created_at).pluck(:role)
+    assert_equal "new", ticket.status
+    assert_equal true, ticket.processing
+    assert_equal [ "user" ], ticket.messages.order(:created_at).pluck(:role)
     assert_equal "I paid but did not receive my file", ticket.messages.order(:created_at).first.content
-    assert_equal 2, ticket.agent_runs.count
-    assert_equal 1, ticket.tool_calls.count
-    assert_select "textarea[name='message[content]'][data-action='keydown->enter-submit#submitOnEnter']"
-    assert_select "form[action='#{close_widget_ticket_path(ticket)}']"
+    assert_equal 0, ticket.agent_runs.count
+    assert_equal 0, ticket.tool_calls.count
+    assert_select "turbo-cable-stream-source"
+    assert_select "[data-role='assistant-loading']"
+    assert_select "textarea[name='message[content]'][data-action='keydown->enter-submit#submitOnEnter']", count: 0
+    assert_select "form[action='#{close_widget_ticket_path(ticket)}']", count: 0
+  end
+
+  test "rendered follow-up form keeps the widget actions after async reply" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "anna@example.com")
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "awaiting_customer",
+      channel: "widget",
+      current_layer: "specialist",
+      processing: false
+    )
+    ticket.messages.create!(role: "user", content: "I paid but did not receive my file")
+    ticket.messages.create!(role: "assistant", content: "I found your request.")
+
+    html = ApplicationController.render(
+      partial: "widget/tickets/chat",
+      locals: { ticket: ticket }
+    )
+
+    assert_includes html, %(action="#{widget_ticket_messages_path(ticket)}")
+    assert_includes html, %(action="#{close_widget_ticket_path(ticket)}")
+    assert_includes html, %(data-action="keydown-&gt;enter-submit#submitOnEnter")
   end
 
   test "customer can close the ticket from the widget" do
@@ -101,6 +137,40 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_select "span", text: "resolved"
     assert_select "form[action='#{widget_ticket_messages_path(ticket)}']", count: 0
     assert_select "a[href='https://www.aipassportphoto.co/contact']"
+  end
+
+  test "follow-up returns a turbo stream with the new user message and loading state immediately" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "anna@example.com")
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "awaiting_customer",
+      channel: "widget",
+      current_layer: "specialist",
+      processing: false
+    )
+    ticket.messages.create!(role: "user", content: "I paid but did not receive my file")
+    ticket.messages.create!(role: "assistant", content: "I found your request.")
+
+    clear_enqueued_jobs
+
+    assert_enqueued_with(job: SupportPipelineJob) do
+      post widget_ticket_messages_path(ticket),
+           params: { message: { content: "Can you check the status again?" } },
+           headers: { "Accept" => "text/vnd.turbo-stream.html" }
+    end
+
+    assert_response :success
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    assert_equal true, ticket.reload.processing
+    assert_includes response.body, %(<turbo-stream action="replace" target="#{ActionView::RecordIdentifier.dom_id(ticket, :chat)}">)
+    assert_includes response.body, "Can you check the status again?"
+    assert_includes response.body, "Loading..."
   end
 
   test "motor admin is protected by basic auth backed by rails credentials" do
