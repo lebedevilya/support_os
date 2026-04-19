@@ -22,6 +22,23 @@ module ApplicationHelper
     value.to_s
   end
 
+  def ticket_status_label(ticket)
+    return "Needs support" if ticket.status == "escalated"
+    return "Waiting on support" if ticket.manual_takeover? && ticket.status == "in_progress"
+    return "Waiting on customer" if ticket.status == "awaiting_customer"
+    return "Resolved" if ticket.status == "resolved"
+    return "New" if ticket.status == "new"
+
+    ticket.status.to_s.humanize
+  end
+
+  def ticket_status_badge_class(ticket)
+    return "bg-rose-100 text-rose-900" if ticket.status == "escalated"
+    return "bg-amber-100 text-amber-900" if ticket.manual_takeover? && ticket.status == "in_progress"
+    return "bg-emerald-100 text-emerald-900" if ticket.status == "awaiting_customer"
+    return "bg-slate-100 text-slate-700"
+  end
+
   def agent_source_label(snapshot)
     source = parse_json_like(snapshot)["source"].to_s
 

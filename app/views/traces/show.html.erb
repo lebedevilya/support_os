@@ -3,6 +3,14 @@
     <%= link_to "← Back to ticket", ticket_path(@ticket), class: "text-sm font-semibold text-slate-600 transition hover:text-slate-900" %>
     <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Dedicated Trace</p>
     <h1 class="text-3xl font-bold text-slate-900">Ticket #<%= @ticket.id %> trace</h1>
+    <div class="mt-3 flex flex-wrap gap-2">
+      <span class="<%= ticket_status_badge_class(@ticket) %> rounded-full px-3 py-1 text-xs font-medium">
+        <%= ticket_status_label(@ticket) %>
+      </span>
+      <% if @ticket.manual_takeover? %>
+        <span class="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900">Human-owned ticket</span>
+      <% end %>
+    </div>
   </header>
 
   <% if @ticket.manual_takeover? %>

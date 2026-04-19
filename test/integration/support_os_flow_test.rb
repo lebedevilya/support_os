@@ -304,7 +304,7 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_match(/##{escalated_ticket.id}.*##{normal_ticket.id}/m, response.body)
     assert_select "tr.bg-rose-50"
-    assert_select "span", text: "escalated"
+    assert_select "span", text: "Needs support"
   end
 
   test "ticket detail and trace pages expose operational context" do
@@ -423,6 +423,7 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert_response :success
     assert_includes response.body, "Reply as support"
+    assert_includes response.body, "Waiting on customer"
     assert_includes response.body, "checking the delivery details"
   end
 
@@ -464,6 +465,11 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_equal [ "user", "human", "user" ], ticket.messages.order(:created_at).pluck(:role)
     assert_includes response.body, "Thanks, can you update me tomorrow?"
     assert_not_includes response.body, "Loading..."
+
+    get ticket_path(ticket)
+
+    assert_response :success
+    assert_includes response.body, "Waiting on support"
   end
 
   test "tickets index supports filtering, counts, and pagination" do

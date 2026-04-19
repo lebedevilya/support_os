@@ -5,8 +5,8 @@
       <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Ticket Detail</p>
       <h1 class="text-3xl font-bold text-slate-900">Ticket #<%= @ticket.id %></h1>
       <div class="mt-3 flex flex-wrap gap-2">
-        <span class="<%= @ticket.status == 'escalated' ? 'bg-rose-100 text-rose-900' : 'bg-slate-100 text-slate-700' %> rounded-full px-3 py-1 text-xs font-medium">
-          <%= @ticket.status %>
+        <span class="<%= ticket_status_badge_class(@ticket) %> rounded-full px-3 py-1 text-xs font-medium">
+          <%= ticket_status_label(@ticket) %>
         </span>
         <% if @ticket.manual_takeover? %>
           <span class="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900">Human-owned ticket</span>
@@ -31,7 +31,7 @@
         <div><dt class="font-medium">Customer</dt><dd><%= @ticket.customer.email %></dd></div>
         <div><dt class="font-medium">Category</dt><dd><%= @ticket.category.presence || "other" %></dd></div>
         <div><dt class="font-medium">Priority</dt><dd><%= @ticket.priority.presence || "normal" %></dd></div>
-        <div><dt class="font-medium">Status</dt><dd><%= @ticket.status %></dd></div>
+        <div><dt class="font-medium">Status</dt><dd><%= ticket_status_label(@ticket) %></dd></div>
         <div><dt class="font-medium">Current layer</dt><dd><%= @ticket.current_layer %></dd></div>
         <div><dt class="font-medium">Ownership</dt><dd><%= @ticket.manual_takeover? ? "Human-owned" : "Automation can continue" %></dd></div>
         <div><dt class="font-medium">Confidence</dt><dd><%= format_confidence(@ticket.last_confidence) %></dd></div>
