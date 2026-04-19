@@ -119,6 +119,39 @@ class SupportPipelineTest < ActiveSupport::TestCase
     assert_equal [ "lookup_deployment" ], ticket.tool_calls.order(:created_at).pluck(:tool_name)
   end
 
+  test "delivery reply does not claim a resend when only a lookup tool was used" do
+    BusinessRecord.create!(
+      company: @company,
+      record_type: "photo_request",
+      external_id: "APP-1001",
+      customer_email: "anna@example.com",
+      status: "completed",
+      payload: {
+        asset_delivery: "sent",
+        download_url: "https://example.test/download/APP-1001"
+      }
+    )
+
+    ticket = @company.tickets.create!(
+      customer: @customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "I paid but did not receive my file")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    ticket.reload
+
+    reply = ticket.messages.order(:created_at).last.content
+
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal [ "lookup_photo_request" ], ticket.tool_calls.order(:created_at).pluck(:tool_name)
+    refute_includes reply.downcase, "resent"
+    assert_includes reply.downcase, "delivery status"
+  end
+
   test "uses an injected llm client for triage and specialist decisions" do
     KnowledgeArticle.create!(
       company: @company,
@@ -166,6 +199,87 @@ class SupportPipelineTest < ActiveSupport::TestCase
     specialist_run = ticket.agent_runs.order(:created_at).second
     assert_equal "llm", JSON.parse(triage_run.output_snapshot).fetch("source")
     assert_equal "llm", JSON.parse(specialist_run.output_snapshot).fetch("source")
+  end
+
+  test "escalates when triage confidence is below the guardrail" do
+    ticket = @company.tickets.create!(
+      customer: @customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Do you support Canada passport photos?")
+
+    llm_client = FakeLlmClient.new(
+      {
+        category: "policy",
+        priority: "normal",
+        route: "specialist",
+        confidence: 0.59,
+        needs_human_now: false,
+        reasoning_summary: "This looks like a support question but confidence is weak."
+      }
+    )
+
+    SupportPipeline.new(ticket: ticket, llm_client: llm_client).call
+
+    ticket.reload
+
+    assert_equal "escalated", ticket.status
+    assert_equal "human", ticket.current_layer
+    assert_equal 2, ticket.agent_runs.count
+    assert_equal [ "TriageAgent", "HumanHandoff" ], ticket.agent_runs.order(:created_at).pluck(:agent_name)
+    assert_equal 1, llm_client.calls.size
+    assert_equal "human", ticket.messages.order(:created_at).last.role
+    assert_includes ticket.escalation_reason, "confidence"
+  end
+
+  test "escalates when specialist confidence is below the guardrail even if it drafted a reply" do
+    KnowledgeArticle.create!(
+      company: @company,
+      title: "Supported Countries",
+      category: "policy",
+      content: "We support passport photo formats for Canada, the US, the UK, and Schengen countries."
+    )
+
+    ticket = @company.tickets.create!(
+      customer: @customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Do you support Canada passport photos?")
+
+    llm_client = FakeLlmClient.new(
+      {
+        category: "policy",
+        priority: "normal",
+        route: "specialist",
+        confidence: 0.91,
+        needs_human_now: false,
+        reasoning_summary: "The customer is asking a supported-country question."
+      },
+      {
+        reply: "Yes. Canada passport photos are supported.",
+        resolve_ticket: true,
+        confidence: 0.69,
+        used_knowledge_articles: [ "Supported Countries" ],
+        used_tools: [],
+        reasoning_summary: "The knowledge is relevant but confidence is still too weak."
+      }
+    )
+
+    SupportPipeline.new(ticket: ticket, llm_client: llm_client).call
+
+    ticket.reload
+
+    assert_equal "escalated", ticket.status
+    assert_equal "human", ticket.current_layer
+    assert_equal 2, ticket.agent_runs.count
+    assert_equal [ "TriageAgent", "SpecialistAgent" ], ticket.agent_runs.order(:created_at).pluck(:agent_name)
+    assert_equal "human", ticket.messages.order(:created_at).last.role
+    assert_includes ticket.escalation_reason, "confidence"
+    assert_includes ticket.handoff_note, "human review"
   end
 
   class FakeLlmClient

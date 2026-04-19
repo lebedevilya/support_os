@@ -1,6 +1,9 @@
 require_relative "llm/client"
 
 class SupportPipeline
+  TRIAGE_CONFIDENCE_THRESHOLD = 0.6
+  SPECIALIST_CONFIDENCE_THRESHOLD = 0.7
+
   def initialize(ticket:, llm_client: :auto)
     @ticket = ticket
     @llm_client =
@@ -14,7 +17,9 @@ class SupportPipeline
   end
 
   def call
-    triage_result = Agents::TriageAgent.new(ticket: @ticket, llm_client: @llm_client).call
+    triage_result = apply_triage_guardrails(
+      Agents::TriageAgent.new(ticket: @ticket, llm_client: @llm_client).call
+    )
     create_agent_run("TriageAgent", triage_result)
 
     @ticket.update!(
@@ -28,7 +33,11 @@ class SupportPipeline
     return escalate!(triage_result) if triage_result[:route] == "escalate"
     return create_knowledge_answer!(triage_result) if triage_result[:route] == "knowledge_answer"
 
-    specialist_result = Agents::SpecialistAgent.new(ticket: @ticket, triage_result: triage_result, llm_client: @llm_client).call
+    specialist_result = apply_specialist_guardrails(
+      Agents::SpecialistAgent.new(ticket: @ticket, triage_result: triage_result, llm_client: @llm_client).call,
+      category: triage_result[:category],
+      priority: triage_result[:priority]
+    )
     create_agent_run("SpecialistAgent", specialist_result)
 
     @ticket.update!(
@@ -99,5 +108,37 @@ class SupportPipeline
   def create_knowledge_answer!(triage_result)
     @ticket.messages.create!(role: "assistant", content: triage_result.fetch(:reply))
     triage_result
+  end
+
+  def apply_triage_guardrails(result)
+    return result if result[:route] == "escalate"
+    return result if result.fetch(:confidence) >= TRIAGE_CONFIDENCE_THRESHOLD
+
+    guardrail_escalation_result(
+      result,
+      threshold: TRIAGE_CONFIDENCE_THRESHOLD,
+      handoff_note: "Escalated for human review because triage confidence was below the automation threshold."
+    )
+  end
+
+  def apply_specialist_guardrails(result, category:, priority:)
+    return result if result[:status] == "escalated"
+    return result.fetch(:confidence) >= SPECIALIST_CONFIDENCE_THRESHOLD ? result : guardrail_escalation_result(
+      result.merge(category: category, priority: priority),
+      threshold: SPECIALIST_CONFIDENCE_THRESHOLD,
+      handoff_note: "Escalated for human review because specialist confidence was below the automation threshold."
+    )
+  end
+
+  def guardrail_escalation_result(result, threshold:, handoff_note:)
+    result.merge(
+      status: "escalated",
+      route: "escalate",
+      current_layer: "human",
+      decision: "escalate",
+      escalation_reason: "Automation confidence #{result.fetch(:confidence)} was below the required threshold of #{threshold}.",
+      handoff_note: handoff_note,
+      reasoning_summary: "#{result[:reasoning_summary]} Escalated by pipeline confidence guardrail."
+    )
   end
 end

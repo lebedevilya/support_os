@@ -56,7 +56,7 @@ module Agents
           current_layer: "specialist",
           confidence: 0.87,
           decision: "answered",
-          reply: "I found your request and resent the asset to your email.",
+          reply: delivery_status_reply(record),
           reasoning_summary: "A matching business record was found for the customer email.",
           input_snapshot: latest_message.content
         }
@@ -238,8 +238,14 @@ module Agents
         - used_tools: array of strings
         - reasoning_summary: short sentence
         Use only the provided knowledge and tool results.
+        Do not claim any operational action happened unless the tool results explicitly show that action happened.
         If the case is ambiguous or unsafe, set resolve_ticket to false.
       PROMPT
+    end
+
+    def delivery_status_reply(record)
+      delivery_state = record.payload["asset_delivery"].presence || record.status
+      "I found your request. The delivery status is currently marked as #{delivery_state}. I have not triggered a resend from this chat."
     end
 
     def llm_specialist_result(response)
