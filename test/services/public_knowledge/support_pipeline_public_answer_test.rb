@@ -329,6 +329,62 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     assert_equal 2, ticket.agent_runs.count
     refute_equal "public_knowledge", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
   end
+
+  test "curated manual knowledge is preferred for important faq answers" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    noisy_source = Knowledge::Source.create!(
+      company: company,
+      url: "https://www.aipassportphoto.co/terms",
+      title: "Terms of Service",
+      source_kind: "website_page",
+      status: "imported",
+      extracted_text: "Canada users agree to the website terms and passport service conditions."
+    )
+    noisy_source.chunks.create!(
+      company: company,
+      content: "Canada users agree to the website terms and passport service conditions.",
+      position: 0,
+      token_estimate: 12
+    )
+
+    manual_entry = Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Canada passport photos",
+      content: "AI Passport Photo supports Canada passport photos and checks the photo against the required 50 x 70 mm format.",
+      status: "active"
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Can I make Canada passport picture?")
+
+    llm_client = FakeKnowledgeLlmClient.new(
+      {
+        reply: "Yes, you can. Canada passport photos are supported.",
+        confidence: 0.96,
+        reasoning_summary: "Answered from the curated Canada passport photo guidance.",
+        cited_source_url: nil
+      }
+    )
+
+    SupportPipeline.new(ticket: ticket, llm_client: llm_client).call
+
+    knowledge_chunks = llm_client.calls.first[:context][:knowledge_chunks]
+
+    assert_equal manual_entry.title, knowledge_chunks.first[:manual_entry_title]
+    assert_includes knowledge_chunks.first[:content], "50 x 70 mm"
+  end
 end
 
 class FakeKnowledgeLlmClient

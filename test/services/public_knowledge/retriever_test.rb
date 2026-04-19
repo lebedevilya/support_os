@@ -53,4 +53,43 @@ class PublicKnowledge::RetrieverTest < ActiveSupport::TestCase
     assert_equal 1, results.size
     assert_includes results.first.content, "Under 60 seconds"
   end
+
+  test "prefers curated manual knowledge over noisy imported pages" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+
+    noisy_source = Knowledge::Source.create!(
+      company: company,
+      url: "https://www.aipassportphoto.co/terms",
+      title: "Terms of Service Last updated",
+      source_kind: "website_page",
+      status: "imported",
+      extracted_text: "Canada users agree to the service terms. Passport services are subject to the general website conditions."
+    )
+    noisy_source.chunks.create!(
+      company: company,
+      content: "Canada users agree to the service terms. Passport services are subject to the general website conditions.",
+      position: 0,
+      token_estimate: 15
+    )
+
+    manual_entry = Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Canada passport photos",
+      content: "AI Passport Photo supports Canada passport photos and prepares them in the required 50 x 70 mm format.",
+      status: "active"
+    )
+
+    results = PublicKnowledge::Retriever.new(
+      company: company,
+      query: "Can I make Canada passport picture?"
+    ).matches
+
+    assert_equal manual_entry, results.first.chunk.manual_entry
+    assert_includes results.first.chunk.content, "50 x 70 mm"
+  end
 end

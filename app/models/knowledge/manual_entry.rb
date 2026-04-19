@@ -7,5 +7,13 @@ module Knowledge
     has_many :chunks, class_name: "Knowledge::Chunk", foreign_key: :manual_knowledge_entry_id, dependent: :destroy, inverse_of: :manual_entry
 
     validates :title, :content, :status, presence: true
+
+    after_commit :index_chunks!, on: [ :create, :update ]
+
+    private
+
+    def index_chunks!
+      Knowledge::ManualEntryIndexer.new(manual_entry: self).call
+    end
   end
 end

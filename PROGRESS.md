@@ -55,6 +55,9 @@ The core runtime is in place:
 - inbox pagination is now implemented with `pagy`
 - MotorAdmin is mounted at `/admin` behind HTTP Basic auth backed by Rails credentials
 - specialist-created `ToolCall` records are now backfilled onto the corresponding `SpecialistAgent` run when the pipeline persists the run
+- curated `Knowledge::ManualEntry` records are now part of the public-knowledge strategy instead of relying only on imported website text
+- manual-entry chunk indexing now lives in a dedicated `Knowledge::ManualEntryIndexer` service rather than hidden model logic
+- public-knowledge retrieval now stays generic in code while preferring curated manual entries over noisy imported chunks
 
 ### Implemented data model
 
@@ -86,6 +89,7 @@ Seed data already includes:
 
 - company records
 - knowledge articles
+- curated manual knowledge entries for the highest-value FAQ answers
 - support rules
 - starter tag records for common demo cases
 - public knowledge source records imported from live sites
@@ -120,6 +124,15 @@ Current imported public sources:
   - `https://nodes.garden/pages/terms_of_service`
   - current chunk count observed after seed: `97`
 
+Current curated manual knowledge after seed:
+
+- `aipassportphoto`
+  - manual entries: `5`
+  - manual chunks: `5`
+- `nodes-garden`
+  - manual entries: `5`
+  - manual chunks: `5`
+
 ### Verified status
 
 The most recently verified flows:
@@ -147,11 +160,14 @@ The most recently verified flows:
 - ticket detail now surfaces tags and clearer ownership state for human-owned tickets
 - trace and ticket pages now use clearer agent source labels instead of raw source keys
 - specialist tool calls created during pipeline execution are now linked to the persisted `SpecialistAgent` run instead of remaining unlinked
+- internal UI now uses operator-facing status labels such as `Needs support`, `Waiting on support`, and `Waiting on customer`
+- curated manual knowledge now outranks noisy imported pages in retrieval without hardcoding company-specific phrases in code
+- manual entries now auto-index into chunks through a dedicated service so retrieval stays in sync with curated content
 
 Most recently re-run tests:
 
-- command: `bin/rails test test/services/support_pipeline_test.rb test/services/public_knowledge/support_pipeline_public_answer_test.rb test/jobs/support_pipeline_job_test.rb test/integration/support_os_flow_test.rb test/services/support_pipeline_support_rule_test.rb test/services/support_rule_matcher_test.rb`
-- result: `35 runs, 324 assertions, 0 failures, 0 errors, 0 skips`
+- command: `bin/rails test test/services/support_pipeline_test.rb test/services/public_knowledge/retriever_test.rb test/services/public_knowledge/support_pipeline_public_answer_test.rb test/jobs/support_pipeline_job_test.rb test/integration/support_os_flow_test.rb test/services/support_pipeline_support_rule_test.rb test/services/support_rule_matcher_test.rb`
+- result: `38 runs, 338 assertions, 0 failures, 0 errors, 0 skips`
 
 Last previously recorded broader suite result:
 
@@ -183,6 +199,7 @@ These planned requirements are already satisfied or mostly satisfied:
 - the ticket model now carries editable tag data instead of forcing support classification to live only in code
 - manual takeover is now explicit: once support replies, the ticket becomes human-owned and automation stops for later customer follow-ups
 - tool traces are now more honest because specialist tool calls are linked to the actual persisted specialist run
+- curated manual knowledge now exists for the key seeded FAQ paths, and retrieval prefers that curated data over noisier imported text
 - Rails + Hotwire architecture with a small service-object core
 - seeded demo cases for reviewer walkthroughs
 
@@ -220,28 +237,26 @@ Why it matters:
 Current problem:
 
 - manual takeover is now enforced correctly and is visible in the UI
-- ticket detail now surfaces tags and ownership, which is an improvement
-- but status semantics are still basic and there is still no stronger operator workflow for "waiting on support" vs "waiting on customer"
+- status semantics are now much clearer than before
+- but the operator workflow is still thin after takeover: there is still no explicit assignee model, inbox split, or stronger human work queue behavior
 
 Why it matters:
 
 - the ownership model is now correct, but the operator UX is still weak
 - this is where the product either becomes a believable support console or stays a demo
 
-### 4. Knowledge and admin are still rough
+### 4. Knowledge quality is still only partially curated
 
 Current problem:
 
-- the embedded widget works now, but it still does not show guided demo prompts or suggested seeded emails
-- the company landing pages are good enough for the demo, but they are still simplified recreations rather than especially faithful versions of the real sites
-- MotorAdmin is mounted, but the knowledge, support-rule, and tag-management workflow has not been curated for a reviewer walkthrough
-- imported public knowledge is much better than before, but it still needs review for chunk quality, duplication, and whether the seeded knowledge actually answers the most important buyer questions cleanly
+- curated manual entries now exist for key FAQs, which is a major improvement
+- but imported public knowledge is still noisy in places and source titles are still ugly or low-signal
+- retrieval is better, but there is still no explicit source-quality curation pass over imported pages and chunks
 
 Why it matters:
 
-- guided walkthroughs should be obvious
-- the landing pages should help the product story, not just host the widget
-- the back office should support the product story, not just exist
+- the system will only feel trustworthy if the knowledge it uses is obviously clean and intentional
+- right now the curated layer exists, but the imported layer still needs cleanup to avoid dragging answer quality down
 
 ### 5. Automatic tagging is still basic
 
@@ -280,10 +295,10 @@ Goal:
 
 Changes:
 
-- tighten status language and visual states for human-owned tickets
-- make "waiting on support" vs "waiting on customer" more explicit
+- add stronger queue behavior for human-owned tickets
+- consider an explicit "assigned/unassigned" or "owned by support" distinction if that helps the demo
 - keep improving trace/ticket labeling so the operator can instantly tell what automation already did and what is now manual
-- make manual takeover visually obvious across the remaining internal surfaces
+- make manual takeover obvious across every remaining internal surface, not just the main ticket/detail views
 
 Expected outcome:
 
@@ -299,8 +314,8 @@ Changes:
 
 - review imported chunks for the seeded companies
 - remove obvious low-value or duplicative chunks
-- make sure the most important public questions map cleanly to strong source pages
-- consider adding a lightweight admin workflow for curated manual knowledge entries where imports are weak
+- clean up weak source titles and noisy pages where possible
+- make sure the most important public questions map cleanly to curated manual entries or strong source pages
 
 ### Step 3. Improve tag operations
 

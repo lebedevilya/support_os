@@ -2,6 +2,8 @@ module PublicKnowledge
   class Retriever
     Match = Struct.new(:chunk, :score, keyword_init: true)
     MAX_RESULTS = 3
+    MANUAL_ENTRY_BONUS = 3
+    TITLE_TERM_WEIGHT = 2
 
     TERM_EXPANSIONS = {
       "how long" => %w[seconds second minutes minute instant instantly],
@@ -27,7 +29,7 @@ module PublicKnowledge
       @company.knowledge_chunks
         .to_a
         .filter_map do |chunk|
-          score = score(chunk.content.downcase, candidate_terms)
+          score = score(chunk, candidate_terms)
           next if score.zero?
 
           Match.new(chunk: chunk, score: score)
@@ -46,8 +48,15 @@ module PublicKnowledge
       terms.uniq
     end
 
-    def score(content, terms)
-      terms.sum { |term| content.include?(term) ? 1 : 0 }
+    def score(chunk, terms)
+      content = chunk.content.to_s.downcase
+      title = [ chunk.source&.title, chunk.manual_entry&.title ].compact.join(" ").downcase
+
+      content_score = terms.sum { |term| content.include?(term) ? 1 : 0 }
+      title_score = terms.sum { |term| title.include?(term) ? TITLE_TERM_WEIGHT : 0 }
+      manual_bonus = chunk.manual_entry.present? ? MANUAL_ENTRY_BONUS : 0
+
+      content_score + title_score + manual_bonus
     end
   end
 end

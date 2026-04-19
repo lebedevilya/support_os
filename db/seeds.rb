@@ -166,6 +166,61 @@ end
   KnowledgeArticle.create!(attributes)
 end
 
+[
+  {
+    company: aipassportphoto,
+    title: "Canada passport photos",
+    content: "AI Passport Photo supports Canada passport photos. The service prepares photos in the required 50 x 70 mm format with a plain white background and checks the image against official passport photo requirements."
+  },
+  {
+    company: aipassportphoto,
+    title: "Turnaround time",
+    content: "Most passport photo requests are completed in under 60 seconds. In heavier traffic, delivery can take up to 2 minutes."
+  },
+  {
+    company: aipassportphoto,
+    title: "Money-back guarantee",
+    content: "AI Passport Photo offers a 100% money-back guarantee if a passport photo is rejected for compliance reasons. Rejection and refund disputes are still reviewed by human support before a final decision."
+  },
+  {
+    company: aipassportphoto,
+    title: "Privacy and retention",
+    content: "Customer photos are stored only as needed to provide the service and are deleted after 30 days unless the customer asks for earlier deletion."
+  },
+  {
+    company: aipassportphoto,
+    title: "Support contact",
+    content: "Customers can contact AI Passport Photo support through the website contact page or by emailing help@aipassportphoto.co."
+  },
+  {
+    company: nodes_garden,
+    title: "Provisioning lifecycle",
+    content: "New nodes.garden deployments move through provisioning, syncing, and healthy states. Provisioning delays can happen while infrastructure boots or while the node catches up to chain state."
+  },
+  {
+    company: nodes_garden,
+    title: "Provisioning delays",
+    content: "If a node stays in provisioning, the most common causes are infrastructure startup delay or slow chain synchronization. Human support should review cases that stay stuck unusually long."
+  },
+  {
+    company: nodes_garden,
+    title: "Deployment retries",
+    content: "Failed deployments can be retried after the most recent error is inspected. The system should not claim a retry happened unless the trace includes an explicit retry action."
+  },
+  {
+    company: nodes_garden,
+    title: "Billing basics",
+    content: "nodes.garden billing is usage-backed. Provisioning issues should be resolved before reviewing credits or billing adjustments."
+  },
+  {
+    company: nodes_garden,
+    title: "Support contact",
+    content: "Customers can contact nodes.garden support through the main website support path or by emailing support@nodes.garden."
+  }
+].each do |attributes|
+  Knowledge::ManualEntry.create!(attributes.merge(status: "active"))
+end
+
 def import_public_site!(company:, root_url:)
   PublicKnowledge::SiteImporter.new(company: company, root_url: root_url).call
   puts "Imported public knowledge for #{company.name} from #{root_url}"
