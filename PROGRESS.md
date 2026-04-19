@@ -48,6 +48,11 @@ The core runtime is in place:
 - `SupportPipeline` now enforces confidence guardrails instead of only recording confidence values
 - delivery fallback replies now describe verified state only and no longer claim an asset resend happened without an explicit simulated action
 - deterministic triage routing and public-knowledge blocker boundaries now live in `SupportRule`, not in ad hoc string heuristics inside `TriageAgent`
+- ticket tagging is now implemented with `acts-as-taggable-on`
+- ticket tags are assigned automatically by agent outputs and rule matches, with missing tags created automatically in the DB
+- the inbox now supports filtering by company, status, and tag
+- the inbox now shows aggregate counts by company, status, tag, and total ticket count
+- inbox pagination is now implemented with `pagy`
 - MotorAdmin is mounted at `/admin` behind HTTP Basic auth backed by Rails credentials
 
 ### Implemented data model
@@ -66,6 +71,8 @@ The schema now includes the main demo entities plus editable support routing:
 - `Knowledge::Chunk`
 - `BusinessRecord`
 - `SupportRule`
+- `ActsAsTaggableOn::Tag`
+- `ActsAsTaggableOn::Tagging`
 
 ### Seeded demo setup
 
@@ -79,6 +86,7 @@ Seed data already includes:
 - company records
 - knowledge articles
 - support rules
+- starter tag records for common demo cases
 - public knowledge source records imported from live sites
 - generated chunks from imported pages
 - mock business records
@@ -129,11 +137,13 @@ The most recently verified flows:
 - the widget now enforces a valid customer email before a ticket can be created
 - `OPERATIONAL_TERMS` has been removed; public-knowledge blocking is now rule-driven through `SupportRule`
 - `supported_country?`, `missing_asset?`, and `provisioning_status?` have been removed from `TriageAgent`
+- automatic ticket tagging now works across triage, specialist, knowledge-answer, and support-rule paths
+- the inbox now supports company/status/tag filtering plus count summaries and pagination
 
 Most recently re-run tests:
 
 - command: `bin/rails test test/services/support_pipeline_test.rb test/services/public_knowledge/support_pipeline_public_answer_test.rb test/jobs/support_pipeline_job_test.rb test/integration/support_os_flow_test.rb test/services/support_pipeline_support_rule_test.rb test/services/support_rule_matcher_test.rb`
-- result: `30 runs, 243 assertions, 0 failures, 0 errors, 0 skips`
+- result: `33 runs, 291 assertions, 0 failures, 0 errors, 0 skips`
 
 Last previously recorded broader suite result:
 
@@ -161,6 +171,8 @@ These planned requirements are already satisfied or mostly satisfied:
 - widget chat now behaves like a real async support flow instead of blocking on the LLM request
 - customer can explicitly close the conversation with `This solved my issue`
 - the demo now feels more like a real portfolio product because company cards open branded landing pages with embedded support
+- the internal inbox now behaves like a usable operations surface with filtering, tag summaries, and pagination
+- the ticket model now carries editable tag data instead of forcing support classification to live only in code
 - Rails + Hotwire architecture with a small service-object core
 - seeded demo cases for reviewer walkthroughs
 
@@ -193,13 +205,14 @@ Why it matters:
 - the backend captures more than the UI reveals
 - the reviewer may miss the strongest part of the implementation
 
-### 3. Widget and admin are still rough
+### 3. Knowledge and admin are still rough
 
 Current problem:
 
 - the embedded widget works now, but it still does not show guided demo prompts or suggested seeded emails
 - the company landing pages are good enough for the demo, but they are still simplified recreations rather than especially faithful versions of the real sites
-- MotorAdmin is mounted, but the knowledge and support-rule workflow has not been curated for a reviewer walkthrough
+- MotorAdmin is mounted, but the knowledge, support-rule, and tag-management workflow has not been curated for a reviewer walkthrough
+- imported public knowledge is much better than before, but it still needs review for chunk quality, duplication, and whether the seeded knowledge actually answers the most important buyer questions cleanly
 
 Why it matters:
 
@@ -207,7 +220,20 @@ Why it matters:
 - the landing pages should help the product story, not just host the widget
 - the back office should support the product story, not just exist
 
-### 4. Triage still has one coarse fallback path
+### 4. Automatic tagging is still basic
+
+Current problem:
+
+- tags are now persisted and surfaced, but the automatic assignment is still shallow
+- some fallback tags are inferred from category/status/rule names rather than a stronger controlled taxonomy
+- there is no admin UX yet for consolidating near-duplicate tags or auditing low-quality tag assignment
+
+Why it matters:
+
+- tags are only useful if they stay clean
+- without curation, the tag layer can drift into noisy metadata instead of becoming a durable operational tool
+
+### 5. Triage still has one coarse fallback path
 
 Current problem:
 
@@ -223,20 +249,42 @@ Why it matters:
 
 Do these in this order.
 
-### Step 1. Upgrade the reviewer-facing UI and trace
+### Step 1. Make the human support workflow real
 
 Goal:
 
-- make the best parts of the system obvious in 30 seconds
+- make escalated tickets actually workable for a human operator
 
 Changes:
 
-- inbox: show category and confidence
-- ticket detail: show summary, escalation reason, handoff note, and tool calls
-- trace page: show input/output payloads and clearer labels such as `Mock tool call`, `Knowledge answer`, or `Human escalation rule`
-- attach tool calls to the relevant agent run
-- make it obvious in the UI when a reply came from public knowledge vs specialist handling vs human escalation
-- consider a stronger visual distinction between inbox rows, ticket metadata, and trace payloads now that base navigation is in place
+- attach `ToolCall` records to the relevant `AgentRun` consistently
+- improve ticket detail and trace labels so the human can see what the system already did
+- make escalated tickets visually dominant and easy to clear after a manual reply
+
+### Step 2. Tighten knowledge quality
+
+Goal:
+
+- make public-knowledge answers more consistently useful
+
+Changes:
+
+- review imported chunks for the seeded companies
+- remove obvious low-value or duplicative chunks
+- make sure the most important public questions map cleanly to strong source pages
+- consider adding a lightweight admin workflow for curated manual knowledge entries where imports are weak
+
+### Step 3. Improve tag operations
+
+Goal:
+
+- make tags a real support ops primitive instead of passive metadata
+
+Changes:
+
+- expose tags clearly on ticket detail
+- add a simple admin workflow for merging or cleaning tags
+- tighten the LLM prompt and fallback taxonomy so tag output stays stable
 
 Expected outcome:
 

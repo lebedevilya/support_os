@@ -21,6 +21,7 @@ class SupportPipeline
       Agents::TriageAgent.new(ticket: @ticket, llm_client: @llm_client).call
     )
     create_agent_run("TriageAgent", triage_result)
+    assign_tags!(triage_result)
 
     @ticket.update!(
       status: triage_result.fetch(:status),
@@ -39,6 +40,7 @@ class SupportPipeline
       priority: triage_result[:priority]
     )
     create_agent_run("SpecialistAgent", specialist_result)
+    assign_tags!(triage_result, specialist_result)
 
     @ticket.update!(
       status: specialist_result.fetch(:status),
@@ -106,6 +108,7 @@ class SupportPipeline
   end
 
   def create_knowledge_answer!(triage_result)
+    assign_tags!(triage_result)
     @ticket.messages.create!(role: "assistant", content: triage_result.fetch(:reply))
     triage_result
   end
@@ -140,5 +143,31 @@ class SupportPipeline
       handoff_note: handoff_note,
       reasoning_summary: "#{result[:reasoning_summary]} Escalated by pipeline confidence guardrail."
     )
+  end
+
+  def assign_tags!(*results)
+    tags = results.flat_map { |result| tag_candidates_for(result) }.uniq
+    return if tags.empty?
+
+    @ticket.tag_list.add(tags)
+    @ticket.save! if @ticket.changed?
+  end
+
+  def tag_candidates_for(result)
+    explicit_tags = Array(result[:tags]).filter_map { |tag| normalize_tag(tag) }
+    return explicit_tags if explicit_tags.any?
+
+    [
+      result[:category],
+      result[:current_layer],
+      result[:status],
+      result[:decision],
+      result[:matched_rule_name]
+    ].filter_map { |value| normalize_tag(value) }
+  end
+
+  def normalize_tag(value)
+    candidate = value.to_s.parameterize
+    candidate.presence
   end
 end

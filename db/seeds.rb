@@ -3,6 +3,8 @@ AgentRun.delete_all
 Message.delete_all
 Ticket.delete_all
 BusinessRecord.delete_all
+ActsAsTaggableOn::Tagging.delete_all
+ActsAsTaggableOn::Tag.delete_all
 Knowledge::Chunk.delete_all
 Knowledge::ManualEntry.delete_all
 Knowledge::Source.delete_all
@@ -173,6 +175,26 @@ end
 
 import_public_site!(company: aipassportphoto, root_url: "https://www.aipassportphoto.co/")
 import_public_site!(company: nodes_garden, root_url: "https://nodes.garden/")
+
+%w[
+  policy
+  supported-country
+  public-knowledge
+  delivery
+  asset-delivery
+  refund
+  embassy-rejection
+  human-review
+  technical
+  provisioning
+  node
+  missing-record
+  llm-failure
+  payment
+  discount
+].each do |name|
+  ActsAsTaggableOn::Tag.find_or_create_by!(name: name)
+end
 
 [
   {

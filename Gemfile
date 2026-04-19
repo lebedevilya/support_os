@@ -20,6 +20,8 @@ gem "tailwindcss-rails"
 gem "jbuilder"
 gem "motor-admin"
 gem "ruby_llm"
+gem "acts-as-taggable-on"
+gem "pagy"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"

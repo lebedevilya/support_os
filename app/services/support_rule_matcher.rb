@@ -52,7 +52,8 @@ class SupportRuleMatcher
       decision: rule.route == "escalate" ? "escalate" : "triage",
       escalation_reason: rule.escalation_reason,
       handoff_note: rule.handoff_note,
-      reasoning_summary: rule.reasoning_summary
+      reasoning_summary: rule.reasoning_summary,
+      tags: [ rule.category, rule.name ]
     }
   end
 end

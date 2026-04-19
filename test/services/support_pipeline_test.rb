@@ -217,7 +217,8 @@ class SupportPipelineTest < ActiveSupport::TestCase
         route: "specialist",
         confidence: 0.91,
         needs_human_now: false,
-        reasoning_summary: "The customer is asking a supported-country question."
+        reasoning_summary: "The customer is asking a supported-country question.",
+        tags: [ "passport", "canada" ]
       },
       {
         reply: "Yes. Canada passport photos are supported.",
@@ -225,7 +226,8 @@ class SupportPipelineTest < ActiveSupport::TestCase
         confidence: 0.93,
         used_knowledge_articles: [ "Supported Countries" ],
         used_tools: [],
-        reasoning_summary: "The company knowledge base confirms Canada is supported."
+        reasoning_summary: "The company knowledge base confirms Canada is supported.",
+        tags: [ "policy", "canada", "supported-country" ]
       }
     )
 
@@ -237,6 +239,7 @@ class SupportPipelineTest < ActiveSupport::TestCase
     assert_equal 2, llm_client.calls.size
     assert_equal [ "triage", "specialist" ], llm_client.calls.map { |call| call[:task] }
     assert_includes ticket.messages.order(:created_at).last.content, "Canada"
+    assert_equal [ "canada", "passport", "policy", "supported-country" ], ticket.reload.tag_list.sort
     triage_run = ticket.agent_runs.order(:created_at).first
     specialist_run = ticket.agent_runs.order(:created_at).second
     assert_equal "llm", JSON.parse(triage_run.output_snapshot).fetch("source")

@@ -35,7 +35,8 @@ module Agents
         decision: "answered",
         reply: "Yes. We support Canada passport photos.",
         reasoning_summary: "The supported countries article confirms Canada is supported.",
-        input_snapshot: latest_message.content
+        input_snapshot: latest_message.content,
+        tags: %w[policy supported-country canada]
       }
     end
 
@@ -58,7 +59,8 @@ module Agents
           decision: "answered",
           reply: delivery_status_reply(record),
           reasoning_summary: "A matching business record was found for the customer email.",
-          input_snapshot: latest_message.content
+          input_snapshot: latest_message.content,
+          tags: %w[delivery asset-delivery]
         }
       else
         {
@@ -71,7 +73,8 @@ module Agents
           handoff_note: "Escalated for human review because no matching business record was found for this delivery request.",
           reply: "I could not safely verify your request, so I have escalated this to a human reviewer.",
           reasoning_summary: "Delivery issue requires data that is not available in the demo records.",
-          input_snapshot: latest_message.content
+          input_snapshot: latest_message.content,
+          tags: %w[delivery human-review missing-record]
         }
       end
     end
@@ -95,7 +98,8 @@ module Agents
           decision: "answered",
           reply: "Your node deployment is still provisioning. The latest record shows the deployment is active but not healthy yet.",
           reasoning_summary: "A deployment record was found and the current status is still provisioning.",
-          input_snapshot: latest_message.content
+          input_snapshot: latest_message.content,
+          tags: %w[technical provisioning node]
         }
       else
         {
@@ -108,7 +112,8 @@ module Agents
           handoff_note: "Escalated for human review because no deployment record was found for this node provisioning request.",
           reply: "I could not safely verify the deployment status, so I have escalated this to a human reviewer.",
           reasoning_summary: "Technical request requires a deployment record that is not available in the demo data.",
-          input_snapshot: latest_message.content
+          input_snapshot: latest_message.content,
+          tags: %w[technical human-review missing-record]
         }
       end
     end
@@ -124,7 +129,8 @@ module Agents
         handoff_note: "Escalated for human review because no safe specialist path exists for this request.",
         reply: "I have escalated this request to a human reviewer.",
         reasoning_summary: "No specialist workflow exists for the current category.",
-        input_snapshot: latest_message.content
+        input_snapshot: latest_message.content,
+        tags: %w[human-review unsupported-category]
       }
     end
 
@@ -153,6 +159,7 @@ module Agents
           - used_knowledge_articles: array of strings
           - used_tools: array of strings
           - reasoning_summary: short sentence
+          - tags: array of strings
           Use only the provided knowledge and do not invent policies.
         PROMPT
         context: {
@@ -237,6 +244,7 @@ module Agents
         - used_knowledge_articles: array of strings
         - used_tools: array of strings
         - reasoning_summary: short sentence
+        - tags: array of strings
         Use only the provided knowledge and tool results.
         Do not claim any operational action happened unless the tool results explicitly show that action happened.
         If the case is ambiguous or unsafe, set resolve_ticket to false.
@@ -261,7 +269,8 @@ module Agents
         escalation_reason: (resolve ? nil : "The specialist decision requires human review."),
         handoff_note: (resolve ? nil : "Escalated for human review based on the specialist decision."),
         reasoning_summary: response[:reasoning_summary].presence || "Specialist completed.",
-        input_snapshot: latest_message.content
+        input_snapshot: latest_message.content,
+        tags: normalized_tags(response[:tags], fallback_tags: specialist_tags(resolve))
       }
     end
 
@@ -276,7 +285,8 @@ module Agents
         handoff_note: "Escalated for human review because the specialist step failed.",
         reply: "I could not safely complete this request, so I have escalated it to a human reviewer.",
         reasoning_summary: message,
-        input_snapshot: latest_message.content
+        input_snapshot: latest_message.content,
+        tags: normalized_tags(nil, fallback_tags: specialist_tags(false) + [ "llm-failure" ])
       }
     end
 
@@ -291,6 +301,24 @@ module Agents
       return 0.0 if number.nan?
 
       [[ number, 0.0 ].max, 1.0].min
+    end
+
+    def normalized_tags(raw_tags, fallback_tags:)
+      tags = Array(raw_tags).filter_map { |tag| normalize_tag(tag) }
+      tags.presence || fallback_tags
+    end
+
+    def specialist_tags(resolve)
+      tags = [ @triage_result[:category], resolve ? "answered" : "human-review" ]
+      tags << "supported-country" if @triage_result[:category] == "policy"
+      tags << "asset-delivery" if @triage_result[:category] == "delivery"
+      tags += %w[provisioning node] if @triage_result[:category] == "technical"
+      tags.filter_map { |tag| normalize_tag(tag) }.uniq
+    end
+
+    def normalize_tag(value)
+      candidate = value.to_s.parameterize
+      candidate.presence
     end
   end
 end

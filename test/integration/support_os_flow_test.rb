@@ -417,6 +417,73 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "checking the delivery details"
   end
 
+  test "tickets index supports filtering, counts, and pagination" do
+    aipassportphoto = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    nodes_garden = Company.create!(
+      name: "nodes.garden",
+      slug: "nodes-garden",
+      description: "Node deployment support",
+      support_email: "support@nodes.garden"
+    )
+    customer = Customer.create!(email: "anna@example.com")
+
+    first_ticket = aipassportphoto.tickets.create!(
+      customer: customer,
+      status: "awaiting_customer",
+      category: "policy",
+      priority: "normal",
+      channel: "widget",
+      current_layer: "specialist",
+      last_confidence: 0.91
+    )
+    first_ticket.tag_list = [ "canada", "policy" ]
+    first_ticket.save!
+
+    second_ticket = aipassportphoto.tickets.create!(
+      customer: customer,
+      status: "escalated",
+      category: "delivery",
+      priority: "high",
+      channel: "widget",
+      current_layer: "human",
+      last_confidence: 0.51
+    )
+    second_ticket.tag_list = [ "delivery", "refund-risk" ]
+    second_ticket.save!
+
+    third_ticket = nodes_garden.tickets.create!(
+      customer: customer,
+      status: "awaiting_customer",
+      category: "technical",
+      priority: "normal",
+      channel: "widget",
+      current_layer: "specialist",
+      last_confidence: 0.88
+    )
+    third_ticket.tag_list = [ "provisioning", "node" ]
+    third_ticket.save!
+
+    get tickets_path, params: { company_id: aipassportphoto.id, status: "awaiting_customer", tag: "canada" }
+
+    assert_response :success
+    assert_includes response.body, "Total tickets"
+    assert_includes response.body, "AI Passport Photo"
+    assert_includes response.body, "nodes.garden"
+    assert_includes response.body, "awaiting_customer"
+    assert_includes response.body, "escalated"
+    assert_includes response.body, "canada"
+    assert_includes response.body, "delivery"
+    assert_includes response.body, "Page 1 of 1"
+    assert_includes response.body, "##{first_ticket.id}"
+    assert_not_includes response.body, "##{second_ticket.id}"
+    assert_not_includes response.body, "##{third_ticket.id}"
+  end
+
   test "motor admin is protected by basic auth backed by rails credentials" do
     with_stubbed_credentials(nil, "motor-user", "motor-pass") do
       get "/admin"

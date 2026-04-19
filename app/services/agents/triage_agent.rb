@@ -28,7 +28,8 @@ module Agents
         escalation_reason: "The request is outside the supported demo cases.",
         handoff_note: "Escalated for human review because the request does not fit the current automated support envelope.",
         reasoning_summary: "Unknown request type for the current demo scope.",
-        input_snapshot: latest_message.content
+        input_snapshot: latest_message.content,
+        tags: %w[other human-review unknown-request]
       }
     end
 
@@ -63,6 +64,7 @@ module Agents
           - confidence: decimal between 0 and 1
           - reasoning_summary: short sentence
           - cited_source_url: optional string
+          - tags: array of strings
           Requirements:
           - answer naturally and concisely
           - if the question is yes/no and the knowledge supports it, answer directly
@@ -99,7 +101,8 @@ module Agents
         decision: "knowledge_answer",
         reply: compose_llm_knowledge_reply(response[:reply], response[:cited_source_url], matches),
         reasoning_summary: response[:reasoning_summary].presence || "Answered from public knowledge with LLM synthesis.",
-        input_snapshot: latest_message.content
+        input_snapshot: latest_message.content,
+        tags: normalized_tags(response[:tags], fallback_tags: knowledge_tags(matches))
       }
     rescue StandardError
       fallback_knowledge_answer(matches.first.chunk)
@@ -117,7 +120,8 @@ module Agents
         decision: "knowledge_answer",
         reply: PublicKnowledge::AnswerComposer.new(question: latest_message.content, chunk: best_chunk).call,
         reasoning_summary: "Answered directly from company public knowledge.",
-        input_snapshot: latest_message.content
+        input_snapshot: latest_message.content,
+        tags: fallback_knowledge_tags(best_chunk)
       }
     end
 
@@ -152,6 +156,7 @@ module Agents
           - needs_human_now: boolean
           - reply: optional string when route is knowledge_answer
           - reasoning_summary: short sentence
+          - tags: array of strings
           If the request mentions embassy rejection, government rejection, or a disputed refund, route to escalate.
         PROMPT
         context: {
@@ -176,7 +181,8 @@ module Agents
         escalation_reason: "The LLM triage step failed.",
         handoff_note: "Escalated for human review because automated triage failed: #{e.message}",
         reasoning_summary: "LLM triage failure.",
-        input_snapshot: latest_message.content
+        input_snapshot: latest_message.content,
+        tags: %w[other human-review llm-failure]
       }
     end
 
@@ -201,7 +207,8 @@ module Agents
         escalation_reason: (route == "escalate" ? "The request requires human review." : nil),
         handoff_note: (route == "escalate" ? "Escalated for human review based on the triage decision." : nil),
         reasoning_summary: response[:reasoning_summary].presence || "Triage completed.",
-        input_snapshot: latest_message.content
+        input_snapshot: latest_message.content,
+        tags: normalized_tags(response[:tags], fallback_tags: triage_tags(response, route))
       }
     end
 
@@ -230,6 +237,49 @@ module Agents
       return 0.0 if number.nan?
 
       [ [ number, 0.0 ].max, 1.0 ].min
+    end
+
+    def normalized_tags(raw_tags, fallback_tags:)
+      tags = Array(raw_tags).filter_map { |tag| normalize_tag(tag) }
+      tags.presence || fallback_tags
+    end
+
+    def fallback_knowledge_tags(chunk)
+      [
+        "public-knowledge",
+        "knowledge-answer",
+        "policy",
+        normalize_tag(chunk.source&.title),
+        normalize_tag(chunk.manual_entry&.title),
+        normalize_tag(country_from(latest_message.content))
+      ].compact.uniq
+    end
+
+    def knowledge_tags(matches)
+      matches.flat_map { |match| fallback_knowledge_tags(match.chunk) }.uniq
+    end
+
+    def triage_tags(response, route)
+      tags = [
+        normalized_category(response[:category]),
+        route == "escalate" ? "human-review" : "triage",
+        route
+      ]
+      country = country_from(latest_message.content)
+      tags << country if country
+      tags.compact.uniq
+    end
+
+    def country_from(content)
+      text = content.to_s.downcase
+      return "canada" if text.include?("canada")
+
+      nil
+    end
+
+    def normalize_tag(value)
+      candidate = value.to_s.parameterize
+      candidate.presence
     end
   end
 end

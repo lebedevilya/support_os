@@ -1,4 +1,8 @@
+require "pagy"
+
 module ApplicationHelper
+  include Pagy::NumericHelpers
+
   URL_PATTERN = %r{https?://[^\s<]+}.freeze
 
   def linked_message_content(text)
