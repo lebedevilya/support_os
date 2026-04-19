@@ -145,6 +145,7 @@ class SupportPipelineTest < ActiveSupport::TestCase
     assert_includes ticket.messages.order(:created_at).last.content, "still provisioning"
     assert_equal [ "TriageAgent", "SpecialistAgent" ], ticket.agent_runs.order(:created_at).pluck(:agent_name)
     assert_equal [ "lookup_deployment" ], ticket.tool_calls.order(:created_at).pluck(:tool_name)
+    assert_equal ticket.agent_runs.order(:created_at).last, ticket.tool_calls.order(:created_at).last.agent_run
   end
 
   test "delivery reply does not claim a resend when only a lookup tool was used" do
@@ -190,6 +191,7 @@ class SupportPipelineTest < ActiveSupport::TestCase
 
     assert_equal "awaiting_customer", ticket.status
     assert_equal [ "lookup_photo_request" ], ticket.tool_calls.order(:created_at).pluck(:tool_name)
+    assert_equal ticket.agent_runs.order(:created_at).last, ticket.tool_calls.order(:created_at).last.agent_run
     refute_includes reply.downcase, "resent"
     assert_includes reply.downcase, "delivery status"
   end

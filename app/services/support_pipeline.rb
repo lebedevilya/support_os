@@ -39,7 +39,7 @@ class SupportPipeline
       category: triage_result[:category],
       priority: triage_result[:priority]
     )
-    create_agent_run("SpecialistAgent", specialist_result)
+    create_agent_run("SpecialistAgent", specialist_result, attach_unlinked_tool_calls: true)
     assign_tags!(triage_result, specialist_result)
 
     @ticket.update!(
@@ -57,23 +57,6 @@ class SupportPipeline
   end
 
   private
-
-  def create_agent_run(agent_name, result)
-    Rails.logger.info(
-      "[SupportPipeline] #{agent_name} source=#{result[:source]} status=#{result[:status]} " \
-      "category=#{result[:category]} confidence=#{result[:confidence]}"
-    )
-
-    @ticket.agent_runs.create!(
-      agent_name: agent_name,
-      status: result.fetch(:status),
-      decision: result[:decision],
-      confidence: result.fetch(:confidence),
-      input_snapshot: result[:input_snapshot],
-      output_snapshot: result.to_json,
-      reasoning_summary: result[:reasoning_summary]
-    )
-  end
 
   def escalate!(triage_result)
     @ticket.update!(
@@ -169,5 +152,29 @@ class SupportPipeline
   def normalize_tag(value)
     candidate = value.to_s.parameterize
     candidate.presence
+  end
+
+  def create_agent_run(agent_name, result, attach_unlinked_tool_calls: false)
+    Rails.logger.info(
+      "[SupportPipeline] #{agent_name} source=#{result[:source]} status=#{result[:status]} " \
+      "category=#{result[:category]} confidence=#{result[:confidence]}"
+    )
+
+    agent_run = @ticket.agent_runs.create!(
+      agent_name: agent_name,
+      status: result.fetch(:status),
+      decision: result[:decision],
+      confidence: result.fetch(:confidence),
+      input_snapshot: result[:input_snapshot],
+      output_snapshot: result.to_json,
+      reasoning_summary: result[:reasoning_summary]
+    )
+
+    attach_pending_tool_calls!(agent_run) if attach_unlinked_tool_calls
+    agent_run
+  end
+
+  def attach_pending_tool_calls!(agent_run)
+    @ticket.tool_calls.where(agent_run_id: nil).update_all(agent_run_id: agent_run.id)
   end
 end

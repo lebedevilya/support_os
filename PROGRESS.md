@@ -54,6 +54,7 @@ The core runtime is in place:
 - the inbox now shows aggregate counts by company, status, tag, and total ticket count
 - inbox pagination is now implemented with `pagy`
 - MotorAdmin is mounted at `/admin` behind HTTP Basic auth backed by Rails credentials
+- specialist-created `ToolCall` records are now backfilled onto the corresponding `SpecialistAgent` run when the pipeline persists the run
 
 ### Implemented data model
 
@@ -142,11 +143,15 @@ The most recently verified flows:
 - once support replies manually, subsequent customer follow-ups stay on the human-owned ticket path and do not trigger `SupportPipelineJob`
 - ticket replies from the human support page now redirect back to the reply section instead of jumping to the top
 - inbox company/status/tag summaries now render inside collapsible dropdown sections instead of dumping every item inline
+- manual takeover is now visible in inbox, ticket detail, and trace views
+- ticket detail now surfaces tags and clearer ownership state for human-owned tickets
+- trace and ticket pages now use clearer agent source labels instead of raw source keys
+- specialist tool calls created during pipeline execution are now linked to the persisted `SpecialistAgent` run instead of remaining unlinked
 
 Most recently re-run tests:
 
 - command: `bin/rails test test/services/support_pipeline_test.rb test/services/public_knowledge/support_pipeline_public_answer_test.rb test/jobs/support_pipeline_job_test.rb test/integration/support_os_flow_test.rb test/services/support_pipeline_support_rule_test.rb test/services/support_rule_matcher_test.rb`
-- result: `35 runs, 312 assertions, 0 failures, 0 errors, 0 skips`
+- result: `35 runs, 324 assertions, 0 failures, 0 errors, 0 skips`
 
 Last previously recorded broader suite result:
 
@@ -177,6 +182,7 @@ These planned requirements are already satisfied or mostly satisfied:
 - the internal inbox now behaves like a usable operations surface with filtering, tag summaries, and pagination
 - the ticket model now carries editable tag data instead of forcing support classification to live only in code
 - manual takeover is now explicit: once support replies, the ticket becomes human-owned and automation stops for later customer follow-ups
+- tool traces are now more honest because specialist tool calls are linked to the actual persisted specialist run
 - Rails + Hotwire architecture with a small service-object core
 - seeded demo cases for reviewer walkthroughs
 
@@ -200,22 +206,22 @@ Why it matters:
 
 Current problem:
 
-- `ToolCall` records are not clearly linked to a specific `AgentRun`
-- reviewer-facing UI is much better now, but `ToolCall` linkage is still inconsistent and some views can still show `unlinked`
-- trace payload visibility exists now, but the presentation still needs cleaner labeling and stronger relationships between runs and tool calls
+- specialist `ToolCall` records are now linked to the persisted `SpecialistAgent` run, which fixes the main credibility gap
+- but trace payload visibility is still pretty raw, and the presentation could still do a better job distinguishing automation phases and outcomes
+- triage and handoff traces are clearer than before, but the trace page still reads like a debug screen more than an operator timeline
 
 Why it matters:
 
-- the backend captures more than the UI reveals
-- the reviewer may miss the strongest part of the implementation
+- the backend is now more internally consistent, but the UI still undersells that consistency
+- the reviewer may still miss the strongest part of the implementation if the trace presentation stays too low-level
 
 ### 3. Human support UX is only partially done
 
 Current problem:
 
-- manual takeover is now enforced correctly, which is necessary
-- but the human workflow is still thin after takeover: ticket detail does not yet surface tags clearly, status semantics are still basic, and the trace/ticket story is still too subtle
-- there is still no clear "this ticket is now fully manual" treatment in the internal UI beyond the underlying state
+- manual takeover is now enforced correctly and is visible in the UI
+- ticket detail now surfaces tags and ownership, which is an improvement
+- but status semantics are still basic and there is still no stronger operator workflow for "waiting on support" vs "waiting on customer"
 
 Why it matters:
 
@@ -274,11 +280,10 @@ Goal:
 
 Changes:
 
-- surface tags on ticket detail
 - tighten status language and visual states for human-owned tickets
-- improve trace/ticket labeling so the operator can instantly tell what automation already did and what is now manual
-- make manual takeover visually obvious across inbox and ticket detail
-- attach `ToolCall` records to the relevant `AgentRun` consistently
+- make "waiting on support" vs "waiting on customer" more explicit
+- keep improving trace/ticket labeling so the operator can instantly tell what automation already did and what is now manual
+- make manual takeover visually obvious across the remaining internal surfaces
 
 Expected outcome:
 
@@ -321,8 +326,7 @@ Goal:
 
 Changes:
 
-- improve `ToolCall` to `AgentRun` linkage so traces stop showing `unlinked`
-- expose tool/run relationships more clearly in the ticket and trace UI
+- keep improving the trace presentation now that specialist tool/run linkage is fixed
 - add an explicit `resend_asset` mock tool if the demo truly needs resend claims
 - persist that tool call and attach it to the relevant `AgentRun`
 - expose that tool call clearly in the ticket and trace UI
