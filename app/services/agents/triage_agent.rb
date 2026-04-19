@@ -108,18 +108,70 @@ module Agents
       return if matches.empty?
       return if matches.first.score < KNOWLEDGE_MIN_SCORE
 
-      best_chunk = matches.first.chunk
+      return llm_knowledge_answer(matches) if @llm_client
+
+      fallback_knowledge_answer(matches.first.chunk)
+    end
+
+    def llm_knowledge_answer(matches)
+      response = @llm_client.complete_json(
+        task: "knowledge_answer",
+        prompt: <<~PROMPT,
+          Draft a customer-facing support reply using only the provided public knowledge chunks.
+          Return keys:
+          - reply: string
+          - confidence: decimal between 0 and 1
+          - reasoning_summary: short sentence
+          Requirements:
+          - answer naturally and concisely
+          - if the question is yes/no and the knowledge supports it, answer directly
+          - include a short source citation in the reply with the actual source URL
+          - do not invent policies, tools, account data, or operational actions
+          - do not claim uncertainty if the provided knowledge is sufficient
+        PROMPT
+        context: {
+          company: @ticket.company.name,
+          latest_message: latest_message.content,
+          knowledge_chunks: matches.map do |match|
+            {
+              content: match.chunk.content,
+              score: match.score,
+              source_title: match.chunk.source&.title,
+              source_url: match.chunk.source&.url,
+              manual_entry_title: match.chunk.manual_entry&.title
+            }
+          end
+        }
+      )
 
       {
+        source: "public_knowledge_llm",
+        status: "awaiting_customer",
+        category: "policy",
+        priority: "normal",
+        route: "knowledge_answer",
+        current_layer: "triage",
+        confidence: numeric_confidence(response[:confidence]),
+        decision: "knowledge_answer",
+        reply: response[:reply],
+        reasoning_summary: response[:reasoning_summary].presence || "Answered from public knowledge with LLM synthesis.",
+        input_snapshot: latest_message.content
+      }
+    rescue StandardError
+      fallback_knowledge_answer(matches.first.chunk)
+    end
+
+    def fallback_knowledge_answer(best_chunk)
+      {
         source: "public_knowledge",
-        status: "resolved",
+        status: "awaiting_customer",
         category: "policy",
         priority: "normal",
         route: "knowledge_answer",
         current_layer: "triage",
         confidence: 0.9,
         decision: "knowledge_answer",
-        reply: best_chunk.content,
+        reply: PublicKnowledge::AnswerComposer.new(question: latest_message.content, chunk: best_chunk).call,
         reasoning_summary: "Answered directly from company public knowledge.",
         input_snapshot: latest_message.content
       }
@@ -170,22 +222,20 @@ module Agents
       route =
         if response[:needs_human_now] || response[:route].to_s == "escalate"
           "escalate"
-        elsif response[:route].to_s == "knowledge_answer"
-          "knowledge_answer"
         else
           "specialist"
         end
 
       {
         source: "llm",
-        status: route == "escalate" ? "escalated" : (route == "knowledge_answer" ? "resolved" : "in_progress"),
+        status: route == "escalate" ? "escalated" : "in_progress",
         category: normalized_category(response[:category]),
         priority: normalized_priority(response[:priority]),
         route: route,
-        current_layer: route == "escalate" ? "human" : (route == "knowledge_answer" ? "triage" : "specialist"),
+        current_layer: route == "escalate" ? "human" : "specialist",
         confidence: numeric_confidence(response[:confidence]),
-        decision: route == "escalate" ? "escalate" : (route == "knowledge_answer" ? "knowledge_answer" : "triage"),
-        reply: response[:reply],
+        decision: route == "escalate" ? "escalate" : "triage",
+        reply: nil,
         escalation_reason: (route == "escalate" ? "The request requires human review." : nil),
         handoff_note: (route == "escalate" ? "Escalated for human review based on the triage decision." : nil),
         reasoning_summary: response[:reasoning_summary].presence || "Triage completed.",

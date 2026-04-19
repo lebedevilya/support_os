@@ -31,7 +31,7 @@ class SupportPipelineTest < ActiveSupport::TestCase
 
     ticket.reload
 
-    assert_equal "resolved", ticket.status
+    assert_equal "awaiting_customer", ticket.status
     assert_equal "specialist", ticket.current_layer
     assert_equal "policy", ticket.category
     assert_equal 2, ticket.agent_runs.count
@@ -111,7 +111,7 @@ class SupportPipelineTest < ActiveSupport::TestCase
 
     ticket.reload
 
-    assert_equal "resolved", ticket.status
+    assert_equal "awaiting_customer", ticket.status
     assert_equal "technical", ticket.category
     assert_equal "assistant", ticket.messages.order(:created_at).last.role
     assert_includes ticket.messages.order(:created_at).last.content, "still provisioning"
@@ -158,7 +158,7 @@ class SupportPipelineTest < ActiveSupport::TestCase
 
     ticket.reload
 
-    assert_equal "resolved", ticket.status
+    assert_equal "awaiting_customer", ticket.status
     assert_equal 2, llm_client.calls.size
     assert_equal [ "triage", "specialist" ], llm_client.calls.map { |call| call[:task] }
     assert_includes ticket.messages.order(:created_at).last.content, "Canada"

@@ -24,6 +24,13 @@ module Widget
       render :create, status: :ok
     end
 
+    def close
+      @ticket = Ticket.find(params[:id])
+      @ticket.update!(status: "resolved")
+
+      render :close, status: :ok
+    end
+
     private
 
     def ticket_params

@@ -10,6 +10,9 @@ Rails.application.routes.draw do
 
   namespace :widget do
     resources :tickets, only: [ :new, :create ] do
+      member do
+        patch :close
+      end
       resources :messages, only: [ :create ]
     end
   end

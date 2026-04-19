@@ -68,12 +68,39 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_equal company, ticket.company
     assert_equal "anna@example.com", ticket.customer.email
     assert_equal "widget", ticket.channel
-    assert_equal "resolved", ticket.status
+    assert_equal "awaiting_customer", ticket.status
     assert_equal [ "user", "assistant" ], ticket.messages.order(:created_at).pluck(:role)
     assert_equal "I paid but did not receive my file", ticket.messages.order(:created_at).first.content
     assert_equal 2, ticket.agent_runs.count
     assert_equal 1, ticket.tool_calls.count
     assert_select "textarea[name='message[content]'][data-action='keydown->enter-submit#submitOnEnter']"
+    assert_select "form[action='#{close_widget_ticket_path(ticket)}']"
+  end
+
+  test "customer can close the ticket from the widget" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "anna@example.com")
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "awaiting_customer",
+      channel: "widget",
+      current_layer: "specialist"
+    )
+    ticket.messages.create!(role: "user", content: "I paid but did not receive my file")
+    ticket.messages.create!(role: "assistant", content: "I found your request. Source: https://www.aipassportphoto.co/contact")
+
+    patch close_widget_ticket_path(ticket)
+
+    assert_response :success
+    assert_equal "resolved", ticket.reload.status
+    assert_select "span", text: "resolved"
+    assert_select "form[action='#{widget_ticket_messages_path(ticket)}']", count: 0
+    assert_select "a[href='https://www.aipassportphoto.co/contact']"
   end
 
   test "motor admin is protected by basic auth backed by rails credentials" do

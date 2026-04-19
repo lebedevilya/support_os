@@ -5,8 +5,20 @@
     <% end %>
   </div>
 
-  <%= form_with url: widget_ticket_messages_path(ticket), scope: :message, class: "space-y-3", data: { turbo: false } do |form| %>
-    <%= form.text_area :content, rows: 4, class: "block w-full rounded-2xl border border-slate-300 px-4 py-3", data: { controller: "enter-submit", action: "keydown->enter-submit#submitOnEnter" } %>
-    <%= form.submit "Send follow-up", class: "rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900" %>
+  <% if ticket.status == "resolved" %>
+    <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+      This conversation is closed.
+    </div>
+  <% else %>
+    <div class="flex flex-wrap gap-3">
+      <%= form_with url: close_widget_ticket_path(ticket), method: :patch, class: "inline", data: { turbo: false } do %>
+        <%= submit_tag "This solved my issue", class: "rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white" %>
+      <% end %>
+    </div>
+
+    <%= form_with url: widget_ticket_messages_path(ticket), scope: :message, class: "space-y-3", data: { turbo: false } do |form| %>
+      <%= form.text_area :content, rows: 4, class: "block w-full rounded-2xl border border-slate-300 px-4 py-3", data: { controller: "enter-submit", action: "keydown->enter-submit#submitOnEnter" } %>
+      <%= form.submit "Send follow-up", class: "rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900" %>
+    <% end %>
   <% end %>
 </div>

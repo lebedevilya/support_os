@@ -29,10 +29,10 @@ module Agents
 
       {
         source: "fallback",
-        status: "resolved",
+        status: "awaiting_customer",
         current_layer: "specialist",
         confidence: 0.9,
-        decision: "resolved",
+        decision: "answered",
         reply: "Yes. We support Canada passport photos.",
         reasoning_summary: "The supported countries article confirms Canada is supported.",
         input_snapshot: latest_message.content
@@ -52,10 +52,10 @@ module Agents
 
         {
           source: "fallback",
-          status: "resolved",
+          status: "awaiting_customer",
           current_layer: "specialist",
           confidence: 0.87,
-          decision: "resolved",
+          decision: "answered",
           reply: "I found your request and resent the asset to your email.",
           reasoning_summary: "A matching business record was found for the customer email.",
           input_snapshot: latest_message.content
@@ -89,10 +89,10 @@ module Agents
 
         {
           source: "fallback",
-          status: "resolved",
+          status: "awaiting_customer",
           current_layer: "specialist",
           confidence: 0.85,
-          decision: "resolved",
+          decision: "answered",
           reply: "Your node deployment is still provisioning. The latest record shows the deployment is active but not healthy yet.",
           reasoning_summary: "A deployment record was found and the current status is still provisioning.",
           input_snapshot: latest_message.content
@@ -247,10 +247,10 @@ module Agents
 
       {
         source: "llm",
-        status: resolve ? "resolved" : "escalated",
+        status: resolve ? "awaiting_customer" : "escalated",
         current_layer: resolve ? "specialist" : "human",
         confidence: numeric_confidence(response[:confidence]),
-        decision: resolve ? "resolved" : "escalate",
+        decision: resolve ? "answered" : "escalate",
         reply: response[:reply],
         escalation_reason: (resolve ? nil : "The specialist decision requires human review."),
         handoff_note: (resolve ? nil : "Escalated for human review based on the specialist decision."),
