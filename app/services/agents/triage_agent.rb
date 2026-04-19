@@ -122,10 +122,14 @@ module Agents
           - reply: string
           - confidence: decimal between 0 and 1
           - reasoning_summary: short sentence
+          - cited_source_url: optional string
           Requirements:
           - answer naturally and concisely
           - if the question is yes/no and the knowledge supports it, answer directly
-          - include a short source citation in the reply with the actual source URL
+          - do not include URLs or citation text directly in reply
+          - set cited_source_url only when one provided source page directly supports the answer
+          - leave cited_source_url blank when the provided knowledge does not directly answer the question
+          - never cite a generic, unrelated, or fallback page just to add a link
           - do not invent policies, tools, account data, or operational actions
           - do not claim uncertainty if the provided knowledge is sufficient
         PROMPT
@@ -153,7 +157,7 @@ module Agents
         current_layer: "triage",
         confidence: numeric_confidence(response[:confidence]),
         decision: "knowledge_answer",
-        reply: response[:reply],
+        reply: compose_llm_knowledge_reply(response[:reply], response[:cited_source_url], matches),
         reasoning_summary: response[:reasoning_summary].presence || "Answered from public knowledge with LLM synthesis.",
         input_snapshot: latest_message.content
       }
@@ -175,6 +179,24 @@ module Agents
         reasoning_summary: "Answered directly from company public knowledge.",
         input_snapshot: latest_message.content
       }
+    end
+
+    def compose_llm_knowledge_reply(reply, cited_source_url, matches)
+      reply_text = reply.to_s.strip
+      return reply_text if reply_text.blank?
+
+      source_url = validated_cited_source_url(cited_source_url, matches)
+      return reply_text unless source_url
+
+      "#{reply_text} Source: #{source_url}"
+    end
+
+    def validated_cited_source_url(cited_source_url, matches)
+      candidate = cited_source_url.to_s.strip
+      return if candidate.blank?
+
+      allowed_urls = matches.filter_map { |match| match.chunk.source&.url.presence }.uniq
+      allowed_urls.include?(candidate) ? candidate : nil
     end
 
     def llm_triage

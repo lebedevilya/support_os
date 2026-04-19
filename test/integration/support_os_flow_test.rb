@@ -130,13 +130,15 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     ticket.messages.create!(role: "user", content: "I paid but did not receive my file")
     ticket.messages.create!(role: "assistant", content: "I found your request. Source: https://www.aipassportphoto.co/contact")
 
-    patch close_widget_ticket_path(ticket)
+    patch close_widget_ticket_path(ticket), headers: { "Accept" => "text/vnd.turbo-stream.html" }
 
     assert_response :success
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
     assert_equal "resolved", ticket.reload.status
-    assert_select "span", text: "resolved"
-    assert_select "form[action='#{widget_ticket_messages_path(ticket)}']", count: 0
-    assert_select "a[href='https://www.aipassportphoto.co/contact']"
+    assert_includes response.body, %(<turbo-stream action="replace" target="#{ActionView::RecordIdentifier.dom_id(ticket, :chat)}">)
+    assert_includes response.body, "This conversation is closed."
+    assert_not_includes response.body, widget_ticket_messages_path(ticket)
+    assert_includes response.body, %(href="https://www.aipassportphoto.co/contact")
   end
 
   test "follow-up returns a turbo stream with the new user message and loading state immediately" do

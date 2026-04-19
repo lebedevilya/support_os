@@ -35,9 +35,10 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
 
     llm_client = FakeKnowledgeLlmClient.new(
       {
-        reply: "It usually takes under 60 seconds. Source: Homepage — https://www.aipassportphoto.co/.",
+        reply: "It usually takes under 60 seconds.",
         confidence: 0.93,
-        reasoning_summary: "Answered from the homepage delivery timing text."
+        reasoning_summary: "Answered from the homepage delivery timing text.",
+        cited_source_url: "https://www.aipassportphoto.co/"
       }
     )
 
@@ -52,9 +53,12 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     reply = ticket.messages.order(:created_at).last.content
     assert_includes reply, "60 seconds"
     assert_includes reply, "Source:"
+    assert_includes reply, "https://www.aipassportphoto.co/"
     assert_equal "policy", ticket.category
     assert_equal [ "knowledge_answer" ], llm_client.calls.map { |call| call[:task] }
     assert_includes llm_client.calls.first[:context][:knowledge_chunks].first[:content], "Under 60 seconds"
+    assert_includes llm_client.calls.first[:prompt], "do not include URLs or citation text directly in reply"
+    assert_includes llm_client.calls.first[:prompt], "set cited_source_url only when one provided source page directly supports the answer"
   end
 
   test "uses the llm to compose a yes-no faq answer from public knowledge" do
@@ -91,9 +95,10 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
 
     llm_client = FakeKnowledgeLlmClient.new(
       {
-        reply: "Yes, you can. Canada passport photos are supported. Source: Homepage — https://www.aipassportphoto.co/.",
+        reply: "Yes, you can. Canada passport photos are supported.",
         confidence: 0.94,
-        reasoning_summary: "Answered from the supported countries text."
+        reasoning_summary: "Answered from the supported countries text.",
+        cited_source_url: "https://www.aipassportphoto.co/"
       }
     )
 
@@ -107,6 +112,55 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     assert_includes reply, "Canada"
     assert_includes reply, "Source:"
     refute_match(/\AWe support passport and visa photo requirements/m, reply)
+  end
+
+  test "does not append a source link when the llm does not provide a directly supporting source" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    source = Knowledge::Source.create!(
+      company: company,
+      url: "https://www.aipassportphoto.co/privacy",
+      title: "Privacy Policy",
+      source_kind: "website_page",
+      status: "imported",
+      extracted_text: "We explain how personal data is processed and stored."
+    )
+    source.chunks.create!(
+      company: company,
+      content: "We explain how personal data is processed and stored.",
+      position: 0,
+      token_estimate: 10
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "How much will it cost?")
+
+    llm_client = FakeKnowledgeLlmClient.new(
+      {
+        reply: "The provided public information does not include pricing details.",
+        confidence: 0.52,
+        reasoning_summary: "The retrieved privacy content does not answer pricing.",
+        cited_source_url: nil
+      }
+    )
+
+    SupportPipeline.new(ticket: ticket, llm_client: llm_client).call
+
+    reply = ticket.reload.messages.order(:created_at).last.content
+
+    refute_includes reply, "Source:"
+    refute_match(%r{https?://}, reply)
   end
 
   test "does not answer an operational delivery issue from public knowledge" do

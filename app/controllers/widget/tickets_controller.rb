@@ -30,7 +30,10 @@ module Widget
       @ticket = Ticket.find(params[:id])
       @ticket.update!(status: "resolved")
 
-      render :close, status: :ok
+      respond_to do |format|
+        format.turbo_stream { render :close, status: :ok }
+        format.html { render :close, status: :ok }
+      end
     end
 
     private
