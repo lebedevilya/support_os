@@ -6,11 +6,23 @@ module Widget
     end
 
     def create
-      ActiveRecord::Base.transaction do
-        company = Company.find(ticket_params[:company_id])
-        customer = Customer.find_or_create_by!(email: ticket_params[:email].downcase.strip)
+      @company = Company.find(ticket_params[:company_id])
+      normalized_email = ticket_params[:email].to_s.downcase.strip
+      @customer = Customer.find_or_initialize_by(email: normalized_email)
+      @customer.validate
 
-        @ticket = company.tickets.create!(
+      unless @customer.errors.empty?
+        @ticket = @company.tickets.build
+        @ticket.company = @company
+        @companies = Company.order(:name)
+
+        return render_invalid_ticket
+      end
+
+      ActiveRecord::Base.transaction do
+        customer = Customer.find_or_create_by!(email: normalized_email)
+
+        @ticket = @company.tickets.create!(
           customer: customer,
           status: "new",
           channel: "widget",
@@ -40,6 +52,14 @@ module Widget
 
     def ticket_params
       params.expect(ticket: [ :company_id, :email, :content ])
+    end
+
+    def render_invalid_ticket
+      if turbo_frame_request?
+        render "widget/tickets/invalid", status: :unprocessable_entity
+      else
+        render :new, status: :unprocessable_entity
+      end
     end
   end
 end

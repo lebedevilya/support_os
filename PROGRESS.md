@@ -45,6 +45,8 @@ The core runtime is in place:
 - public-knowledge citations are now conditional and only appended when the cited URL is one of the retrieved supporting sources
 - widget conversations now run asynchronously through `SupportPipelineJob` with Turbo Streams instead of blocking on the request cycle
 - company landing pages now embed the support widget as a bottom-right floating shell instead of forcing users onto a separate widget-only page
+- `SupportPipeline` now enforces confidence guardrails instead of only recording confidence values
+- delivery fallback replies now describe verified state only and no longer claim an asset resend happened without an explicit simulated action
 - MotorAdmin is mounted at `/admin` behind HTTP Basic auth backed by Rails credentials
 
 ### Implemented data model
@@ -120,11 +122,14 @@ The most recently verified flows:
 - each company page now shows an embedded floating support widget launcher in the bottom-right corner
 - inbox ticket rows are clickable with hover affordance
 - ticket detail and trace pages now include back navigation links
+- low-confidence triage now escalates before specialist runs
+- low-confidence specialist outcomes now escalate even if a reply was drafted
+- delivery replies no longer claim a resend when only a lookup tool was used
 
 Most recently re-run tests:
 
-- command: `bin/rails test test/integration/support_os_flow_test.rb test/jobs/support_pipeline_job_test.rb test/services/public_knowledge/support_pipeline_public_answer_test.rb`
-- result: `14 runs, 131 assertions, 0 failures, 0 errors, 0 skips`
+- command: `bin/rails test test/services/support_pipeline_test.rb test/services/public_knowledge/support_pipeline_public_answer_test.rb test/jobs/support_pipeline_job_test.rb test/integration/support_os_flow_test.rb`
+- result: `21 runs, 186 assertions, 0 failures, 0 errors, 0 skips`
 
 Last previously recorded broader suite result:
 
@@ -157,31 +162,19 @@ These planned requirements are already satisfied or mostly satisfied:
 
 These are the main gaps between the current code and the intended demo quality.
 
-### 1. Confidence guardrails are still documented but not enforced
+### 1. Delivery flow is still only partially honest
 
 Current problem:
 
-- confidence thresholds exist in `TECH.md`
-- the pipeline stores confidence but does not enforce escalation based on thresholds
+- the fake “resent asset” claim is gone, which is good
+- but there is still no explicit resend tool path if we want to demonstrate that action honestly
+- tool output is still not exposed clearly enough in the reviewer-facing UI
 
 Why it matters:
 
-- the code still tells a weaker story than the technical plan
-- the demo claims bounded automation but still trusts weak outputs
+- the credibility problem is smaller now, but the operational story is still incomplete
 
-### 2. Delivery flow is not honest enough
-
-Current problem:
-
-- the delivery specialist still claims the asset was resent when a matching record exists
-- no explicit resend tool call or verified resend state backs that claim
-
-Why it matters:
-
-- this breaks the honest-demo requirement
-- it is an easy thing for a reviewer to distrust
-
-### 3. Trace linkage and reviewer-facing UI are underpowered
+### 2. Trace linkage and reviewer-facing UI are underpowered
 
 Current problem:
 
@@ -195,7 +188,7 @@ Why it matters:
 - the backend captures more than the UI reveals
 - the reviewer may miss the strongest part of the implementation
 
-### 4. Widget and admin are still rough
+### 3. Widget and admin are still rough
 
 Current problem:
 
@@ -209,7 +202,7 @@ Why it matters:
 - the landing pages should help the product story, not just host the widget
 - the back office should support the product story, not just exist
 
-### 5. Triage still contains fallback heuristics for non-rule paths
+### 4. Triage still contains fallback heuristics for non-rule paths
 
 Current problem:
 
@@ -225,40 +218,7 @@ Why it matters:
 
 Do these in this order.
 
-### Step 1. Enforce hard confidence guardrails in the pipeline
-
-Goal:
-
-- make the implementation match `TECH.md`
-
-Changes:
-
-- escalate when triage confidence is below `0.6`
-- escalate when specialist confidence is below `0.7`
-- only allow automatic resolution when specialist explicitly resolves and confidence is at least `0.8`
-- add tests covering these cases
-
-Expected outcome:
-
-- the bounded-agent story becomes real instead of just documented
-
-### Step 2. Fix honesty in mock operations
-
-Goal:
-
-- stop claiming actions that were not actually simulated
-
-Changes:
-
-- update delivery handling so replies only describe verified state
-- if we want a "resent asset" path, add an explicit mock tool such as `resend_asset`
-- persist that tool call and show it in the trace
-
-Expected outcome:
-
-- the demo becomes defensible and more credible immediately
-
-### Step 3. Upgrade the reviewer-facing UI and trace
+### Step 1. Upgrade the reviewer-facing UI and trace
 
 Goal:
 
@@ -277,7 +237,26 @@ Expected outcome:
 
 - the reviewer sees a support OS, not just a chat demo
 
-### Step 4. Add guided demo prompts and curate admin
+### Step 2. Add an honest mock resend path if needed
+
+Goal:
+
+- make the best parts of the system obvious in 30 seconds
+
+Changes:
+
+- inbox: show category and confidence
+- ticket detail: show summary, escalation reason, handoff note, and tool calls
+- trace page: show input/output payloads and clearer labels such as `Mock tool call`, `Knowledge answer`, or `Human escalation rule`
+- attach tool calls to the relevant agent run
+- make it obvious in the UI when a reply came from public knowledge vs specialist handling vs human escalation
+- consider a stronger visual distinction between inbox rows, ticket metadata, and trace payloads now that base navigation is in place
+
+Expected outcome:
+
+- the reviewer sees a support OS, not just a chat demo
+
+### Step 3. Add guided demo prompts and curate admin
 
 Goal:
 
@@ -294,7 +273,7 @@ Expected outcome:
 
 - the happy-path walkthrough becomes obvious and repeatable
 
-### Step 5. Tighten knowledge-answer boundaries
+### Step 4. Tighten knowledge-answer boundaries
 
 Goal:
 
@@ -332,14 +311,13 @@ If resuming next session, start here:
 
 1. Add tests for low-confidence triage escalation
 2. Add tests for low-confidence specialist escalation and no-auto-resolve below `0.8`
-3. Enforce the confidence thresholds in `app/services/support_pipeline.rb`
-4. Fix delivery honesty with an explicit resend tool path
-5. Link `ToolCall` records to `AgentRun`
-6. Upgrade inbox, ticket detail, and trace views beyond the navigation/clickability polish already shipped
-7. Tighten knowledge-answer boundaries for weak or irrelevant retrieval hits
-8. Add widget demo prompts and suggested emails
-9. Curate MotorAdmin around `Knowledge::` models and `SupportRule`
-10. Run `rbenv exec bundle exec bin/rails test`
+3. Upgrade inbox, ticket detail, and trace views beyond the navigation/clickability polish already shipped
+4. Link `ToolCall` records to `AgentRun`
+5. Add an explicit `resend_asset` tool path only if the demo truly needs to claim resend behavior
+6. Tighten knowledge-answer boundaries for weak or irrelevant retrieval hits
+7. Add widget demo prompts and suggested emails
+8. Curate MotorAdmin around `Knowledge::` models and `SupportRule`
+9. Run `rbenv exec bundle exec bin/rails test`
 
 ## Key Files
 
@@ -353,6 +331,9 @@ These are the main files to inspect first next session:
 - `app/services/agents/triage_agent.rb`
 - `app/services/agents/specialist_agent.rb`
 - `app/services/support_rule_matcher.rb`
+- `app/views/tickets/index.html.erb`
+- `app/views/tickets/show.html.erb`
+- `app/views/traces/show.html.erb`
 - `app/services/public_knowledge/importer.rb`
 - `app/services/public_knowledge/link_discoverer.rb`
 - `app/services/public_knowledge/site_importer.rb`
@@ -368,9 +349,6 @@ These are the main files to inspect first next session:
 - `app/views/widget/tickets/_embedded_shell.html.erb`
 - `app/views/widget/messages/create.turbo_stream.erb`
 - `app/views/widget/tickets/close.turbo_stream.erb`
-- `app/views/tickets/index.html.erb`
-- `app/views/tickets/show.html.erb`
-- `app/views/traces/show.html.erb`
 - `test/services/support_pipeline_test.rb`
 - `test/services/support_pipeline_support_rule_test.rb`
 - `test/services/support_rule_matcher_test.rb`
@@ -400,8 +378,9 @@ The project is ready to submit when:
 - public-knowledge answers only cite supporting sources when they actually support the answer
 - widget chat feels responsive and conversational instead of blocking on model latency
 - company landing pages make the demo feel like a real product surface instead of a widget sandbox
-- mock operations are honest and clearly labeled
 - confidence guardrails are enforced in code
+- delivery replies do not claim operational actions that were never simulated
+- mock operations are honest and clearly labeled
 - inbox and trace views clearly expose operational state
 - widget has guided demo prompts
 - tests still pass

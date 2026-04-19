@@ -14,13 +14,38 @@
       <dl class="mt-4 space-y-2 text-sm text-slate-700">
         <div><dt class="font-medium">Company</dt><dd><%= @ticket.company.name %></dd></div>
         <div><dt class="font-medium">Customer</dt><dd><%= @ticket.customer.email %></dd></div>
+        <div><dt class="font-medium">Category</dt><dd><%= @ticket.category.presence || "other" %></dd></div>
+        <div><dt class="font-medium">Priority</dt><dd><%= @ticket.priority.presence || "normal" %></dd></div>
         <div><dt class="font-medium">Status</dt><dd><%= @ticket.status %></dd></div>
         <div><dt class="font-medium">Current layer</dt><dd><%= @ticket.current_layer %></dd></div>
+        <div><dt class="font-medium">Confidence</dt><dd><%= format_confidence(@ticket.last_confidence) %></dd></div>
       </dl>
     </div>
 
     <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-semibold text-slate-900">Operational Summary</h2>
+      <div class="mt-4 space-y-4 text-sm text-slate-700">
+        <div>
+          <p class="font-medium text-slate-900">Summary</p>
+          <p class="mt-1"><%= @ticket.summary.presence || "No summary recorded yet." %></p>
+        </div>
+        <div>
+          <p class="font-medium text-slate-900">Escalation reason</p>
+          <p class="mt-1"><%= @ticket.escalation_reason.presence || "No escalation reason recorded." %></p>
+        </div>
+        <div>
+          <p class="font-medium text-slate-900">Handoff note</p>
+          <p class="mt-1"><%= @ticket.handoff_note.presence || "No handoff note recorded." %></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div class="flex items-center justify-between gap-4">
       <h2 class="text-lg font-semibold text-slate-900">Trace Summary</h2>
+      <%= link_to "Open full trace", ticket_trace_path(@ticket), class: "text-sm font-semibold text-slate-600 transition hover:text-slate-900" %>
+    </div>
       <% if @ticket.agent_runs.any? %>
         <div class="mt-4 space-y-3">
           <% @ticket.agent_runs.order(:created_at).each do |run| %>
@@ -33,13 +58,39 @@
                 </span>
               </div>
               <p class="mt-2 text-sm text-slate-600"><%= run.reasoning_summary %></p>
+              <div class="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
+                <span class="rounded-full bg-slate-50 px-3 py-1">status: <%= run.status %></span>
+                <span class="rounded-full bg-slate-50 px-3 py-1">decision: <%= run.decision.presence || "n/a" %></span>
+                <span class="rounded-full bg-slate-50 px-3 py-1">confidence: <%= format_confidence(run.confidence) %></span>
+              </div>
             </div>
           <% end %>
         </div>
       <% else %>
         <p class="mt-4 text-sm text-slate-600">Agent runs and tool calls will appear here once the AI pipeline is wired in.</p>
       <% end %>
-    </div>
+  </section>
+
+  <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <h2 class="text-lg font-semibold text-slate-900">Tool Calls</h2>
+    <% if @ticket.tool_calls.any? %>
+      <div class="mt-4 space-y-3">
+        <% @ticket.tool_calls.order(:created_at).each do |call| %>
+          <div class="rounded-2xl border border-slate-200 px-4 py-3">
+            <div class="flex items-center justify-between gap-4">
+              <p class="font-semibold text-slate-900"><%= call.tool_name %></p>
+              <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"><%= call.status %></span>
+            </div>
+            <p class="mt-2 text-sm text-slate-600">
+              Agent run:
+              <%= call.agent_run&.agent_name || "unlinked" %>
+            </p>
+          </div>
+        <% end %>
+      </div>
+    <% else %>
+      <p class="mt-4 text-sm text-slate-600">No tool calls yet.</p>
+    <% end %>
   </section>
 
   <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">

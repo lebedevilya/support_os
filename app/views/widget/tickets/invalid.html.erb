@@ -1,0 +1,11 @@
+<%= turbo_frame_tag "support_widget" do %>
+  <div class="max-h-[70vh] overflow-y-auto p-5">
+    <div class="space-y-2">
+      <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Customer Widget</p>
+      <h2 class="text-2xl font-bold tracking-tight text-slate-900">Start support conversation</h2>
+      <p class="text-sm text-slate-600">Ask a question without leaving <%= @company.name %>.</p>
+    </div>
+
+    <%= render "widget/tickets/form", ticket: @ticket, company: @company, customer: @customer %>
+  </div>
+<% end %>

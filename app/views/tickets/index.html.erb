@@ -11,8 +11,10 @@
           <th class="px-4 py-3 font-semibold text-slate-700">Ticket</th>
           <th class="px-4 py-3 font-semibold text-slate-700">Company</th>
           <th class="px-4 py-3 font-semibold text-slate-700">Customer</th>
+          <th class="px-4 py-3 font-semibold text-slate-700">Category</th>
           <th class="px-4 py-3 font-semibold text-slate-700">Status</th>
           <th class="px-4 py-3 font-semibold text-slate-700">Layer</th>
+          <th class="px-4 py-3 font-semibold text-slate-700">Confidence</th>
           <th class="px-4 py-3 font-semibold text-slate-700">Updated</th>
         </tr>
       </thead>
@@ -25,8 +27,10 @@
             <td class="px-4 py-3"><%= link_to "##{ticket.id}", ticket_path(ticket), class: "font-semibold text-slate-900 underline-offset-2 hover:underline", onclick: "event.stopPropagation();" %></td>
             <td class="px-4 py-3"><%= ticket.company.name %></td>
             <td class="px-4 py-3"><%= ticket.customer.email %></td>
-            <td class="px-4 py-3"><%= ticket.status %></td>
+            <td class="px-4 py-3"><%= ticket.category.presence || "other" %></td>
+            <td class="px-4 py-3"><span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"><%= ticket.status %></span></td>
             <td class="px-4 py-3"><%= ticket.current_layer %></td>
+            <td class="px-4 py-3"><%= format_confidence(ticket.last_confidence) %></td>
             <td class="px-4 py-3 text-slate-500"><%= ticket.updated_at.to_fs(:short) %></td>
           </tr>
         <% end %>

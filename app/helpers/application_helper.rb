@@ -5,7 +5,26 @@ module ApplicationHelper
     safe_join(linkify_segments(text.to_s))
   end
 
+  def format_confidence(value)
+    number = value.to_f
+    return "n/a" if number <= 0
+
+    "#{(number * 100).round}%"
+  end
+
+  def pretty_json(value)
+    JSON.pretty_generate(parse_json_like(value))
+  rescue JSON::ParserError, TypeError
+    value.to_s
+  end
+
   private
+
+  def parse_json_like(value)
+    return value if value.is_a?(Hash) || value.is_a?(Array)
+
+    JSON.parse(value.to_s)
+  end
 
   def linkify_segments(text)
     text.split(URL_PATTERN).zip(text.scan(URL_PATTERN)).flat_map do |plain_text, url|

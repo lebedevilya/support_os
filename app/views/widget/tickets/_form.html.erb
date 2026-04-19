@@ -1,4 +1,17 @@
 <%= form_with model: [ :widget, ticket ], class: "mt-8 space-y-5" do |form| %>
+  <% customer = local_assigns[:customer] %>
+
+  <% if customer&.errors&.any? %>
+    <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+      <p class="font-semibold">Please enter a valid email before starting the chat.</p>
+      <ul class="mt-2 space-y-1">
+        <% customer.errors.full_messages.each do |message| %>
+          <li><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
   <% if local_assigns[:company].present? %>
     <%= form.hidden_field :company_id, value: company.id, name: "ticket[company_id]" %>
   <% else %>
@@ -10,7 +23,7 @@
 
   <div>
     <%= form.label :email, "Email", class: "mb-2 block text-sm font-medium text-slate-800" %>
-    <%= form.email_field :email, name: "ticket[email]", class: "block w-full rounded-2xl border border-slate-300 px-4 py-3" %>
+    <%= form.email_field :email, name: "ticket[email]", value: customer&.email, required: true, class: "block w-full rounded-2xl border border-slate-300 px-4 py-3" %>
   </div>
 
   <div>

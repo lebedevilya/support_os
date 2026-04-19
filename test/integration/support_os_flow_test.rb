@@ -119,6 +119,41 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_select "form[action='#{close_widget_ticket_path(ticket)}']", count: 0
   end
 
+  test "creating a widget ticket requires a non-blank valid email" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+
+    assert_no_difference [ "Customer.count", "Ticket.count", "Message.count" ] do
+      post widget_tickets_path, params: {
+        ticket: {
+          company_id: company.id,
+          email: "",
+          content: "I paid but did not receive my file"
+        }
+      }
+    end
+
+    assert_response :unprocessable_entity
+    assert_includes response.body, "Email can&#39;t be blank"
+
+    assert_no_difference [ "Customer.count", "Ticket.count", "Message.count" ] do
+      post widget_tickets_path, params: {
+        ticket: {
+          company_id: company.id,
+          email: "not-an-email",
+          content: "I paid but did not receive my file"
+        }
+      }
+    end
+
+    assert_response :unprocessable_entity
+    assert_includes response.body, "Email is invalid"
+  end
+
   test "rendered follow-up form keeps the widget actions after async reply" do
     company = Company.create!(
       name: "AI Passport Photo",
@@ -207,6 +242,100 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_includes response.body, %(<turbo-stream action="replace" target="#{ActionView::RecordIdentifier.dom_id(ticket, :chat)}">)
     assert_includes response.body, "Can you check the status again?"
     assert_includes response.body, "Loading..."
+  end
+
+  test "inbox shows category and confidence for support tickets" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "anna@example.com")
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "awaiting_customer",
+      category: "delivery",
+      priority: "normal",
+      channel: "widget",
+      current_layer: "specialist",
+      last_confidence: 0.87
+    )
+
+    get tickets_path
+
+    assert_response :success
+    assert_select "td", text: "delivery"
+    assert_select "td", text: "87%"
+    assert_select "tr[onclick=\"window.location='#{ticket_path(ticket)}'\"]"
+  end
+
+  test "ticket detail and trace pages expose operational context" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "anna@example.com")
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "escalated",
+      category: "delivery",
+      priority: "high",
+      channel: "widget",
+      current_layer: "human",
+      last_confidence: 0.64,
+      summary: "Delivery request could not be safely completed automatically.",
+      escalation_reason: "Automation confidence 0.64 was below the required threshold of 0.7.",
+      handoff_note: "Escalated for human review because specialist confidence was below the automation threshold."
+    )
+    ticket.messages.create!(role: "user", content: "I paid but did not receive my file")
+    ticket.messages.create!(role: "human", content: "Escalated for human review because specialist confidence was below the automation threshold.")
+    agent_run = ticket.agent_runs.create!(
+      agent_name: "SpecialistAgent",
+      status: "escalated",
+      decision: "escalate",
+      confidence: 0.64,
+      input_snapshot: "I paid but did not receive my file",
+      output_snapshot: {
+        source: "llm",
+        status: "escalated",
+        category: "delivery",
+        priority: "high",
+        route: "escalate",
+        current_layer: "human",
+        confidence: 0.64,
+        decision: "escalate",
+        escalation_reason: "Automation confidence 0.64 was below the required threshold of 0.7.",
+        handoff_note: "Escalated for human review because specialist confidence was below the automation threshold."
+      }.to_json,
+      reasoning_summary: "Escalated by pipeline confidence guardrail."
+    )
+    ticket.tool_calls.create!(
+      agent_run: agent_run,
+      tool_name: "lookup_photo_request",
+      status: "success",
+      input_payload: { email: customer.email }.to_json,
+      output_payload: { external_id: "APP-1001", status: "completed" }.to_json
+    )
+
+    get ticket_path(ticket)
+
+    assert_response :success
+    assert_includes response.body, "Back to tickets"
+    assert_includes response.body, "Delivery request could not be safely completed automatically."
+    assert_includes response.body, "Automation confidence 0.64 was below the required threshold of 0.7."
+    assert_includes response.body, "lookup_photo_request"
+
+    get ticket_trace_path(ticket)
+
+    assert_response :success
+    assert_includes response.body, "Back to ticket"
+    assert_includes response.body, "Escalated by pipeline confidence guardrail."
+    assert_includes response.body, "external_id"
+    assert_includes response.body, "APP-1001"
+    assert_includes response.body, "anna@example.com"
   end
 
   test "motor admin is protected by basic auth backed by rails credentials" do
