@@ -3,6 +3,8 @@ class SupportPipelineJob < ApplicationJob
 
   def perform(ticket_id)
     ticket = Ticket.find(ticket_id)
+    return ticket.update!(processing: false) if ticket.manual_takeover?
+
     SupportPipeline.new(ticket: ticket).call
     ticket.reload.update!(processing: false)
     ticket.broadcast_chat_update!

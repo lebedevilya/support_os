@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_20_120007) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_20_120008) do
   create_table "agent_runs", force: :cascade do |t|
     t.string "agent_name", null: false
     t.decimal "confidence", precision: 4, scale: 2
@@ -370,6 +370,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_20_120007) do
     t.text "escalation_reason"
     t.text "handoff_note"
     t.decimal "last_confidence", precision: 4, scale: 2
+    t.boolean "manual_takeover", default: false, null: false
     t.string "priority"
     t.boolean "processing", default: false, null: false
     t.string "status", null: false

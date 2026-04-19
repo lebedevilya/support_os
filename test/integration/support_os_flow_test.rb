@@ -401,11 +401,12 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
       }
     end
 
-    assert_redirected_to ticket_path(ticket)
+    assert_redirected_to ticket_path(ticket, anchor: "support-reply")
 
     ticket.reload
     assert_equal "awaiting_customer", ticket.status
     assert_equal "human", ticket.current_layer
+    assert_equal true, ticket.manual_takeover
     assert_nil ticket.escalation_reason
     assert_nil ticket.handoff_note
     assert_equal "human", ticket.messages.order(:created_at).last.role
@@ -415,6 +416,46 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, "Reply as support"
     assert_includes response.body, "checking the delivery details"
+  end
+
+  test "follow-up on a manually owned ticket does not re-enter the agent pipeline" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "anna@example.com")
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "awaiting_customer",
+      category: "delivery",
+      priority: "high",
+      channel: "widget",
+      current_layer: "human",
+      manual_takeover: true,
+      processing: false
+    )
+    ticket.messages.create!(role: "user", content: "I paid but did not receive my file")
+    ticket.messages.create!(role: "human", content: "I found your order and I am checking the delivery details now.")
+
+    assert_no_enqueued_jobs only: SupportPipelineJob do
+      post widget_ticket_messages_path(ticket),
+           params: { message: { content: "Thanks, can you update me tomorrow?" } },
+           headers: { "Accept" => "text/vnd.turbo-stream.html" }
+    end
+
+    assert_response :success
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+
+    ticket.reload
+    assert_equal false, ticket.processing
+    assert_equal true, ticket.manual_takeover
+    assert_equal "human", ticket.current_layer
+    assert_equal "in_progress", ticket.status
+    assert_equal [ "user", "human", "user" ], ticket.messages.order(:created_at).pluck(:role)
+    assert_includes response.body, "Thanks, can you update me tomorrow?"
+    assert_not_includes response.body, "Loading..."
   end
 
   test "tickets index supports filtering, counts, and pagination" do

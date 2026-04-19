@@ -26,7 +26,7 @@ class TicketsController < ApplicationController
     content = reply_params[:content].to_s.strip
 
     if content.blank?
-      redirect_to ticket_path(@ticket), alert: "Reply can't be blank."
+      redirect_to ticket_path(@ticket, anchor: "support-reply"), alert: "Reply can't be blank."
       return
     end
 
@@ -35,12 +35,13 @@ class TicketsController < ApplicationController
       @ticket.update!(
         status: "awaiting_customer",
         current_layer: "human",
+        manual_takeover: true,
         escalation_reason: nil,
         handoff_note: nil
       )
     end
 
-    redirect_to ticket_path(@ticket)
+    redirect_to ticket_path(@ticket, anchor: "support-reply")
   end
 
   private

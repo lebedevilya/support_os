@@ -60,4 +60,35 @@ class SupportPipelineJobTest < ActiveJob::TestCase
     assert_equal [ "user", "assistant" ], ticket.messages.order(:created_at).pluck(:role)
     assert_equal 2, ticket.agent_runs.count
   end
+
+  test "does not process a manually owned ticket" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "anna@example.com")
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "in_progress",
+      channel: "widget",
+      current_layer: "human",
+      manual_takeover: true,
+      processing: true
+    )
+    ticket.messages.create!(role: "user", content: "Can you update me?")
+
+    assert_no_difference [ "AgentRun.count", "ToolCall.count" ] do
+      SupportPipelineJob.perform_now(ticket.id)
+    end
+
+    ticket.reload
+
+    assert_equal false, ticket.processing
+    assert_equal "in_progress", ticket.status
+    assert_equal "human", ticket.current_layer
+    assert_equal [ "user" ], ticket.messages.order(:created_at).pluck(:role)
+  end
 end

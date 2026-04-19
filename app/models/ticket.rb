@@ -14,6 +14,10 @@ class Ticket < ApplicationRecord
 
   validates :status, :channel, :current_layer, presence: true
 
+  def manual_takeover?
+    manual_takeover
+  end
+
   def broadcast_chat_update!
     broadcast_replace_to(
       self,

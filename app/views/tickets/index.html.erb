@@ -1,4 +1,5 @@
 <div class="mx-auto w-full max-w-6xl space-y-6">
+  <% selected_company = @companies.find { |company| company.id.to_s == params[:company_id].to_s } %>
   <div>
     <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Internal Inbox</p>
     <h1 class="text-3xl font-bold tracking-tight text-slate-900">Support tickets</h1>
@@ -12,61 +13,55 @@
     <article class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-3">
       <div class="grid gap-4 md:grid-cols-3">
         <div>
-          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">By company</p>
-          <div class="mt-3 space-y-2 text-sm text-slate-700">
-            <% @companies.each do |company| %>
-              <div class="flex items-center justify-between gap-4">
-                <%= link_to company.name, tickets_path(request.query_parameters.merge(company_id: company.id, page: nil)), class: "hover:underline" %>
-                <span><%= @company_counts[company.id] || 0 %></span>
-              </div>
-            <% end %>
-          </div>
+          <details class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-slate-900">
+              <span>By company</span>
+              <span class="text-xs font-medium text-slate-500"><%= selected_company&.name || "All companies" %></span>
+            </summary>
+            <div class="mt-3 max-h-56 space-y-2 overflow-y-auto text-sm text-slate-700">
+              <% @companies.each do |company| %>
+                <div class="flex items-center justify-between gap-4">
+                  <%= link_to company.name, tickets_path(request.query_parameters.merge(company_id: company.id, page: nil)), class: "hover:underline" %>
+                  <span><%= @company_counts[company.id] || 0 %></span>
+                </div>
+              <% end %>
+            </div>
+          </details>
         </div>
         <div>
-          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">By status</p>
-          <div class="mt-3 space-y-2 text-sm text-slate-700">
-            <% @statuses.each do |status| %>
-              <div class="flex items-center justify-between gap-4">
-                <%= link_to status, tickets_path(request.query_parameters.merge(status: status, page: nil)), class: "hover:underline" %>
-                <span><%= @status_counts[status] || 0 %></span>
-              </div>
-            <% end %>
-          </div>
+          <details class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-slate-900">
+              <span>By status</span>
+              <span class="text-xs font-medium text-slate-500"><%= params[:status].presence || "All statuses" %></span>
+            </summary>
+            <div class="mt-3 max-h-56 space-y-2 overflow-y-auto text-sm text-slate-700">
+              <% @statuses.each do |status| %>
+                <div class="flex items-center justify-between gap-4">
+                  <%= link_to status, tickets_path(request.query_parameters.merge(status: status, page: nil)), class: "hover:underline" %>
+                  <span><%= @status_counts[status] || 0 %></span>
+                </div>
+              <% end %>
+            </div>
+          </details>
         </div>
         <div>
-          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">By tag</p>
-          <div class="mt-3 space-y-2 text-sm text-slate-700">
-            <% @tags.each do |tag| %>
-              <div class="flex items-center justify-between gap-4">
-                <%= link_to tag.name, tickets_path(request.query_parameters.merge(tag: tag.name, page: nil)), class: "hover:underline" %>
-                <span><%= @tag_counts[tag.name]&.count.to_i %></span>
-              </div>
-            <% end %>
-          </div>
+          <details class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-slate-900">
+              <span>By tag</span>
+              <span class="text-xs font-medium text-slate-500"><%= params[:tag].presence || "All tags" %></span>
+            </summary>
+            <div class="mt-3 max-h-56 space-y-2 overflow-y-auto text-sm text-slate-700">
+              <% @tags.each do |tag| %>
+                <div class="flex items-center justify-between gap-4">
+                  <%= link_to tag.name, tickets_path(request.query_parameters.merge(tag: tag.name, page: nil)), class: "hover:underline" %>
+                  <span><%= @tag_counts[tag.name]&.count.to_i %></span>
+                </div>
+              <% end %>
+            </div>
+          </details>
         </div>
       </div>
     </article>
-  </section>
-
-  <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-    <%= form_with url: tickets_path, method: :get, class: "grid gap-4 md:grid-cols-[1fr_1fr_1fr_auto]" do |form| %>
-      <div>
-        <%= form.label :company_id, "Company", class: "mb-2 block text-sm font-medium text-slate-800" %>
-        <%= form.select :company_id, options_from_collection_for_select(@companies, :id, :name, params[:company_id]), { include_blank: "All companies" }, class: "block w-full rounded-2xl border border-slate-300 px-4 py-3" %>
-      </div>
-      <div>
-        <%= form.label :status, "Status", class: "mb-2 block text-sm font-medium text-slate-800" %>
-        <%= form.select :status, options_for_select(@statuses, params[:status]), { include_blank: "All statuses" }, class: "block w-full rounded-2xl border border-slate-300 px-4 py-3" %>
-      </div>
-      <div>
-        <%= form.label :tag, "Tag", class: "mb-2 block text-sm font-medium text-slate-800" %>
-        <%= form.select :tag, options_for_select(@tags.map(&:name), params[:tag]), { include_blank: "All tags" }, class: "block w-full rounded-2xl border border-slate-300 px-4 py-3" %>
-      </div>
-      <div class="flex items-end gap-3">
-        <%= form.submit "Filter", class: "rounded-full bg-slate-900 px-4 py-3 text-sm font-semibold text-white" %>
-        <%= link_to "Reset", tickets_path, class: "rounded-full border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-900" %>
-      </div>
-    <% end %>
   </section>
 
   <div class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
