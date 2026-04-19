@@ -10,6 +10,20 @@ class SupportPipelineJobTest < ActiveJob::TestCase
     )
     customer = Customer.create!(email: "anna@example.com")
 
+    SupportRule.create!(
+      company: company,
+      name: "Missing asset delivery questions",
+      active: true,
+      priority: 20,
+      match_type: "any_terms",
+      terms: "did not receive\ndidn't receive",
+      route: "specialist",
+      category: "delivery",
+      priority_level: "normal",
+      confidence: 0.82,
+      reasoning_summary: "Missing asset questions can go to the delivery specialist."
+    )
+
     BusinessRecord.create!(
       company: company,
       record_type: "photo_request",

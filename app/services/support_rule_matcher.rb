@@ -1,9 +1,10 @@
 class SupportRuleMatcher
   Result = Struct.new(:rule, :attributes, keyword_init: true)
 
-  def initialize(company:, content:)
+  def initialize(company:, content:, blocker_only: false)
     @company = company
     @content = content.to_s.downcase
+    @blocker_only = blocker_only
   end
 
   def call
@@ -16,8 +17,10 @@ class SupportRuleMatcher
   private
 
   def scoped_rules
-    company_rules = @company.support_rules.active_first.to_a
-    global_rules = SupportRule.where(company_id: nil).active_first.to_a
+    scope = @blocker_only ? SupportRule.knowledge_blockers : SupportRule.routing_rules
+
+    company_rules = scope.where(company: @company).active_first.to_a
+    global_rules = scope.where(company_id: nil).active_first.to_a
     company_rules + global_rules
   end
 

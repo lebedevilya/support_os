@@ -39,6 +39,73 @@ nodes_garden = Company.create!(
     reasoning_summary: "Embassy or government rejection disputes require human review.",
     escalation_reason: "Refund dispute requires human review.",
     handoff_note: "Escalated for human review because the customer reports an embassy rejection dispute."
+  },
+  {
+    company: aipassportphoto,
+    name: "Supported country policy questions",
+    active: true,
+    priority: 20,
+    match_type: "all_terms",
+    terms: "support\ncanada",
+    route: "specialist",
+    category: "policy",
+    priority_level: "normal",
+    confidence: 0.88,
+    reasoning_summary: "Supported-country policy questions can go to the policy specialist."
+  },
+  {
+    company: aipassportphoto,
+    name: "Missing asset delivery questions",
+    active: true,
+    priority: 20,
+    match_type: "any_terms",
+    terms: "did not receive\ndidn't receive",
+    route: "specialist",
+    category: "delivery",
+    priority_level: "normal",
+    confidence: 0.82,
+    reasoning_summary: "Missing asset questions can go to the delivery specialist."
+  },
+  {
+    company: nodes_garden,
+    name: "Provisioning status questions",
+    active: true,
+    priority: 20,
+    match_type: "any_terms",
+    terms: "provisioning\nnode status",
+    route: "specialist",
+    category: "technical",
+    priority_level: "normal",
+    confidence: 0.84,
+    reasoning_summary: "Provisioning and node-status questions can go to the technical specialist."
+  },
+  {
+    company: aipassportphoto,
+    name: "Operational and billing requests should not use public knowledge",
+    active: true,
+    priority: 90,
+    match_type: "any_terms",
+    terms: "paid\npayment\nrefund\nrejected\ndid not receive\ndidn't receive\ndownload link\nmy file\nmy order\nused the wrong email\nwrong email\ninvoice\nreceipt",
+    route: "specialist",
+    category: "other",
+    priority_level: "normal",
+    confidence: 0.9,
+    reasoning_summary: "Operational and billing issues should not be answered from public knowledge.",
+    blocks_public_knowledge: true
+  },
+  {
+    company: nodes_garden,
+    name: "Operational provisioning requests should not use public knowledge",
+    active: true,
+    priority: 90,
+    match_type: "any_terms",
+    terms: "my node\nprovisioning\nnode status\ninvoice\nreceipt",
+    route: "specialist",
+    category: "other",
+    priority_level: "normal",
+    confidence: 0.9,
+    reasoning_summary: "Provisioning and operational node issues should not be answered from public knowledge.",
+    blocks_public_knowledge: true
   }
 ].each do |attributes|
   SupportRule.create!(attributes)

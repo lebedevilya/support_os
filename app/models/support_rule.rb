@@ -15,6 +15,8 @@ class SupportRule < ApplicationRecord
   validates :name, :terms, :category, :priority_level, :reasoning_summary, presence: true
 
   scope :active_first, -> { where(active: true).order(:priority, :id) }
+  scope :routing_rules, -> { where(blocks_public_knowledge: false) }
+  scope :knowledge_blockers, -> { where(blocks_public_knowledge: true) }
 
   def term_list
     terms.to_s.lines.map(&:strip).reject(&:blank?)

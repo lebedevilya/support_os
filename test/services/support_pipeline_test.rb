@@ -12,6 +12,20 @@ class SupportPipelineTest < ActiveSupport::TestCase
   end
 
   test "resolves a supported country question with triage and specialist traces" do
+    SupportRule.create!(
+      company: @company,
+      name: "Supported country policy questions",
+      active: true,
+      priority: 20,
+      match_type: "all_terms",
+      terms: "support\ncanada",
+      route: "specialist",
+      category: "policy",
+      priority_level: "normal",
+      confidence: 0.88,
+      reasoning_summary: "Supported-country policy questions can go to the policy specialist."
+    )
+
     KnowledgeArticle.create!(
       company: @company,
       title: "Supported Countries",
@@ -87,6 +101,20 @@ class SupportPipelineTest < ActiveSupport::TestCase
     )
     customer = Customer.create!(email: "operator@example.com")
 
+    SupportRule.create!(
+      company: company,
+      name: "Provisioning status questions",
+      active: true,
+      priority: 20,
+      match_type: "any_terms",
+      terms: "provisioning\nnode status",
+      route: "specialist",
+      category: "technical",
+      priority_level: "normal",
+      confidence: 0.84,
+      reasoning_summary: "Provisioning and node-status questions can go to the technical specialist."
+    )
+
     BusinessRecord.create!(
       company: company,
       record_type: "node_deployment",
@@ -120,6 +148,20 @@ class SupportPipelineTest < ActiveSupport::TestCase
   end
 
   test "delivery reply does not claim a resend when only a lookup tool was used" do
+    SupportRule.create!(
+      company: @company,
+      name: "Missing asset delivery questions",
+      active: true,
+      priority: 20,
+      match_type: "any_terms",
+      terms: "did not receive\ndidn't receive",
+      route: "specialist",
+      category: "delivery",
+      priority_level: "normal",
+      confidence: 0.82,
+      reasoning_summary: "Missing asset questions can go to the delivery specialist."
+    )
+
     BusinessRecord.create!(
       company: @company,
       record_type: "photo_request",

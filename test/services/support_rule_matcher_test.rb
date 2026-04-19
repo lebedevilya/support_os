@@ -70,4 +70,46 @@ class SupportRuleMatcherTest < ActiveSupport::TestCase
 
     assert_equal rule, result.rule
   end
+
+  test "knowledge blocker rules are excluded from normal routing matches" do
+    SupportRule.create!(
+      company: @company,
+      name: "Operational requests should not use public knowledge",
+      active: true,
+      priority: 10,
+      match_type: "any_terms",
+      terms: "payment\nrefund",
+      route: "specialist",
+      category: "other",
+      priority_level: "normal",
+      confidence: 0.9,
+      reasoning_summary: "Operational requests should not be answered from public knowledge.",
+      blocks_public_knowledge: true
+    )
+
+    result = SupportRuleMatcher.new(company: @company, content: "I need a refund for my payment").call
+
+    assert_nil result
+  end
+
+  test "knowledge blocker rules can be matched in blocker mode" do
+    rule = SupportRule.create!(
+      company: @company,
+      name: "Operational requests should not use public knowledge",
+      active: true,
+      priority: 10,
+      match_type: "any_terms",
+      terms: "payment\nrefund",
+      route: "specialist",
+      category: "other",
+      priority_level: "normal",
+      confidence: 0.9,
+      reasoning_summary: "Operational requests should not be answered from public knowledge.",
+      blocks_public_knowledge: true
+    )
+
+    result = SupportRuleMatcher.new(company: @company, content: "I need a refund for my payment", blocker_only: true).call
+
+    assert_equal rule, result.rule
+  end
 end

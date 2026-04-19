@@ -172,6 +172,20 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     )
     customer = Customer.create!(email: "anna@example.com")
 
+    SupportRule.create!(
+      company: company,
+      name: "Missing asset delivery questions",
+      active: true,
+      priority: 20,
+      match_type: "any_terms",
+      terms: "did not receive\ndidn't receive",
+      route: "specialist",
+      category: "delivery",
+      priority_level: "normal",
+      confidence: 0.82,
+      reasoning_summary: "Missing asset questions can go to the delivery specialist."
+    )
+
     source = Knowledge::Source.create!(
       company: company,
       url: "https://www.aipassportphoto.co/contact",
@@ -216,6 +230,62 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     assert_equal 2, ticket.agent_runs.count
     assert_equal [ "TriageAgent", "SpecialistAgent" ], ticket.agent_runs.order(:created_at).pluck(:agent_name)
     refute_equal "public_knowledge", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
+  end
+
+  test "public knowledge can be blocked by support-rule boundary without a routing rule" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    SupportRule.create!(
+      company: company,
+      name: "Payment questions should not use public knowledge",
+      active: true,
+      priority: 10,
+      match_type: "any_terms",
+      terms: "payment\nreceipt",
+      route: "specialist",
+      category: "other",
+      priority_level: "normal",
+      confidence: 0.9,
+      reasoning_summary: "Payment-related questions should not be answered from public knowledge.",
+      blocks_public_knowledge: true
+    )
+
+    source = Knowledge::Source.create!(
+      company: company,
+      url: "https://www.aipassportphoto.co/privacy",
+      title: "Privacy Policy",
+      source_kind: "website_page",
+      status: "imported",
+      extracted_text: "We explain how personal data is processed and stored."
+    )
+    source.chunks.create!(
+      company: company,
+      content: "We explain how personal data is processed and stored.",
+      position: 0,
+      token_estimate: 10
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Can I get a payment receipt?")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    ticket.reload
+
+    assert_equal "escalated", ticket.status
+    assert_equal "human", ticket.current_layer
+    assert_equal "fallback", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
   end
 
   test "does not answer from public knowledge on a weak incidental match" do

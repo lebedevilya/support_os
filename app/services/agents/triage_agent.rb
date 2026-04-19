@@ -1,23 +1,6 @@
 module Agents
   class TriageAgent
     KNOWLEDGE_MIN_SCORE = 2
-    OPERATIONAL_TERMS = [
-      "paid",
-      "payment",
-      "refund",
-      "rejected",
-      "did not receive",
-      "didn't receive",
-      "download link",
-      "my file",
-      "my order",
-      "used the wrong email",
-      "wrong email",
-      "my node",
-      "provisioning",
-      "invoice",
-      "receipt"
-    ].freeze
 
     def initialize(ticket:, llm_client: nil)
       @ticket = ticket
@@ -33,63 +16,20 @@ module Agents
 
       return llm_triage if @llm_client
 
-      content = latest_message.content.downcase
-
-      if supported_country?(content)
-        {
-          source: "fallback",
-          status: "in_progress",
-          category: "policy",
-          priority: "normal",
-          route: "specialist",
-          current_layer: "specialist",
-          confidence: 0.88,
-          decision: "resolve_policy",
-          reasoning_summary: "The customer is asking a supported-countries policy question.",
-          input_snapshot: latest_message.content
-        }
-      elsif missing_asset?(content)
-        {
-          source: "fallback",
-          status: "in_progress",
-          category: "delivery",
-          priority: "normal",
-          route: "specialist",
-          current_layer: "specialist",
-          confidence: 0.82,
-          decision: "resolve_delivery",
-          reasoning_summary: "The customer is asking about a missing delivered asset.",
-          input_snapshot: latest_message.content
-        }
-      elsif provisioning_status?(content)
-        {
-          source: "fallback",
-          status: "in_progress",
-          category: "technical",
-          priority: "normal",
-          route: "specialist",
-          current_layer: "specialist",
-          confidence: 0.84,
-          decision: "resolve_provisioning",
-          reasoning_summary: "The customer is asking about node provisioning status.",
-          input_snapshot: latest_message.content
-        }
-      else
-        {
-          source: "fallback",
-          status: "escalated",
-          category: "other",
-          priority: "normal",
-          route: "escalate",
-          current_layer: "human",
-          confidence: 0.55,
-          decision: "escalate",
-          escalation_reason: "The request is outside the supported demo cases.",
-          handoff_note: "Escalated for human review because the request does not fit the current automated support envelope.",
-          reasoning_summary: "Unknown request type for the current demo scope.",
-          input_snapshot: latest_message.content
-        }
-      end
+      {
+        source: "fallback",
+        status: "escalated",
+        category: "other",
+        priority: "normal",
+        route: "escalate",
+        current_layer: "human",
+        confidence: 0.55,
+        decision: "escalate",
+        escalation_reason: "The request is outside the supported demo cases.",
+        handoff_note: "Escalated for human review because the request does not fit the current automated support envelope.",
+        reasoning_summary: "Unknown request type for the current demo scope.",
+        input_snapshot: latest_message.content
+      }
     end
 
     private
@@ -102,7 +42,7 @@ module Agents
     end
 
     def knowledge_answer
-      return if operational_or_sensitive_request?
+      return if public_knowledge_blocked_by_rule?
 
       matches = PublicKnowledge::Retriever.new(company: @ticket.company, query: latest_message.content).matches
       return if matches.empty?
@@ -269,9 +209,8 @@ module Agents
       @ticket.messages.order(:created_at).last
     end
 
-    def operational_or_sensitive_request?
-      content = latest_message.content.downcase
-      OPERATIONAL_TERMS.any? { |term| content.include?(term) }
+    def public_knowledge_blocked_by_rule?
+      SupportRuleMatcher.new(company: @ticket.company, content: latest_message.content, blocker_only: true).call.present?
     end
 
     def normalized_category(value)
@@ -291,18 +230,6 @@ module Agents
       return 0.0 if number.nan?
 
       [ [ number, 0.0 ].max, 1.0 ].min
-    end
-
-    def supported_country?(content)
-      content.include?("support") && content.include?("canada")
-    end
-
-    def missing_asset?(content)
-      content.include?("didn't receive") || content.include?("did not receive")
-    end
-
-    def provisioning_status?(content)
-      content.include?("provisioning") || content.include?("node status")
     end
   end
 end

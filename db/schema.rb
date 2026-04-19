@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_20_013843) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_20_120000) do
   create_table "agent_runs", force: :cascade do |t|
     t.string "agent_name", null: false
     t.decimal "confidence", precision: 4, scale: 2
@@ -309,6 +309,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_20_013843) do
 
   create_table "support_rules", force: :cascade do |t|
     t.boolean "active", default: true, null: false
+    t.boolean "blocks_public_knowledge", default: false, null: false
     t.string "category", null: false
     t.integer "company_id"
     t.decimal "confidence", precision: 4, scale: 2, default: "0.9", null: false
@@ -323,6 +324,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_20_013843) do
     t.string "route", null: false
     t.text "terms", null: false
     t.datetime "updated_at", null: false
+    t.index ["company_id", "active", "blocks_public_knowledge", "priority"], name: "index_support_rules_on_company_active_blockers_priority"
     t.index ["company_id", "active", "priority"], name: "index_support_rules_on_company_id_and_active_and_priority"
     t.index ["company_id"], name: "index_support_rules_on_company_id"
   end
