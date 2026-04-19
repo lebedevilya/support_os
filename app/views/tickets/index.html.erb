@@ -20,15 +20,20 @@
       </thead>
       <tbody class="divide-y divide-slate-100">
         <% @tickets.each do |ticket| %>
+          <% escalated = ticket.status == "escalated" %>
           <tr
-            class="cursor-pointer transition hover:bg-slate-50"
+            class="<%= escalated ? 'bg-rose-50 hover:bg-rose-100' : 'hover:bg-slate-50' %> cursor-pointer transition"
             onclick="window.location='<%= ticket_path(ticket) %>'"
           >
             <td class="px-4 py-3"><%= link_to "##{ticket.id}", ticket_path(ticket), class: "font-semibold text-slate-900 underline-offset-2 hover:underline", onclick: "event.stopPropagation();" %></td>
             <td class="px-4 py-3"><%= ticket.company.name %></td>
             <td class="px-4 py-3"><%= ticket.customer.email %></td>
             <td class="px-4 py-3"><%= ticket.category.presence || "other" %></td>
-            <td class="px-4 py-3"><span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"><%= ticket.status %></span></td>
+            <td class="px-4 py-3">
+              <span class="<%= escalated ? 'bg-rose-200 text-rose-900' : 'bg-slate-100 text-slate-700' %> rounded-full px-3 py-1 text-xs font-medium">
+                <%= ticket.status %>
+              </span>
+            </td>
             <td class="px-4 py-3"><%= ticket.current_layer %></td>
             <td class="px-4 py-3"><%= format_confidence(ticket.last_confidence) %></td>
             <td class="px-4 py-3 text-slate-500"><%= ticket.updated_at.to_fs(:short) %></td>

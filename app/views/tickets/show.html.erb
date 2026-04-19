@@ -101,4 +101,12 @@
       <% end %>
     </div>
   </section>
+
+  <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <h2 class="text-lg font-semibold text-slate-900">Reply as support</h2>
+    <%= form_with url: reply_ticket_path(@ticket), scope: :message, class: "mt-4 space-y-3" do |form| %>
+      <%= form.text_area :content, rows: 4, class: "block w-full rounded-2xl border border-slate-300 px-4 py-3", data: { controller: "enter-submit", action: "keydown->enter-submit#submitOnEnter" } %>
+      <%= form.submit "Send reply", class: "rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white" %>
+    <% end %>
+  </section>
 </div>

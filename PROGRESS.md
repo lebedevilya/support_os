@@ -47,6 +47,7 @@ The core runtime is in place:
 - company landing pages now embed the support widget as a bottom-right floating shell instead of forcing users onto a separate widget-only page
 - `SupportPipeline` now enforces confidence guardrails instead of only recording confidence values
 - delivery fallback replies now describe verified state only and no longer claim an asset resend happened without an explicit simulated action
+- deterministic triage routing and public-knowledge blocker boundaries now live in `SupportRule`, not in ad hoc string heuristics inside `TriageAgent`
 - MotorAdmin is mounted at `/admin` behind HTTP Basic auth backed by Rails credentials
 
 ### Implemented data model
@@ -125,11 +126,14 @@ The most recently verified flows:
 - low-confidence triage now escalates before specialist runs
 - low-confidence specialist outcomes now escalate even if a reply was drafted
 - delivery replies no longer claim a resend when only a lookup tool was used
+- the widget now enforces a valid customer email before a ticket can be created
+- `OPERATIONAL_TERMS` has been removed; public-knowledge blocking is now rule-driven through `SupportRule`
+- `supported_country?`, `missing_asset?`, and `provisioning_status?` have been removed from `TriageAgent`
 
 Most recently re-run tests:
 
-- command: `bin/rails test test/services/support_pipeline_test.rb test/services/public_knowledge/support_pipeline_public_answer_test.rb test/jobs/support_pipeline_job_test.rb test/integration/support_os_flow_test.rb`
-- result: `21 runs, 186 assertions, 0 failures, 0 errors, 0 skips`
+- command: `bin/rails test test/services/support_pipeline_test.rb test/services/public_knowledge/support_pipeline_public_answer_test.rb test/jobs/support_pipeline_job_test.rb test/integration/support_os_flow_test.rb test/services/support_pipeline_support_rule_test.rb test/services/support_rule_matcher_test.rb`
+- result: `30 runs, 243 assertions, 0 failures, 0 errors, 0 skips`
 
 Last previously recorded broader suite result:
 
@@ -151,6 +155,8 @@ These planned requirements are already satisfied or mostly satisfied:
 - public knowledge seeded from live company sites instead of placeholder snippets
 - same-domain crawl for support/legal pages during site import
 - knowledge-answer routing is stricter than before and no longer triggers on any incidental chunk hit
+- deterministic triage routing for the current demo cases is now DB-backed through `SupportRule`
+- public-knowledge blocking for operational/sensitive requests is now DB-backed through `SupportRule`
 - knowledge answers now remain in `awaiting_customer` and do not auto-close the ticket
 - widget chat now behaves like a real async support flow instead of blocking on the LLM request
 - customer can explicitly close the conversation with `This solved my issue`
@@ -179,9 +185,8 @@ Why it matters:
 Current problem:
 
 - `ToolCall` records are not clearly linked to a specific `AgentRun`
-- inbox rows are clickable now, but still do not show category and confidence
-- ticket detail now has back navigation, but still does not fully show summary, escalation reason, handoff note, and tool output context
-- trace page now has back navigation, but still does not show enough payload detail to feel operational
+- reviewer-facing UI is much better now, but `ToolCall` linkage is still inconsistent and some views can still show `unlinked`
+- trace payload visibility exists now, but the presentation still needs cleaner labeling and stronger relationships between runs and tool calls
 
 Why it matters:
 
@@ -202,17 +207,17 @@ Why it matters:
 - the landing pages should help the product story, not just host the widget
 - the back office should support the product story, not just exist
 
-### 4. Triage still contains fallback heuristics for non-rule paths
+### 4. Triage still has one coarse fallback path
 
 Current problem:
 
-- the embassy refund path is now DB-backed, but `supported_country?`, `missing_asset?`, and `provisioning_status?` are still hardcoded fallback heuristics
-- `OPERATIONAL_TERMS` for blocking knowledge answers is also heuristic logic in code
+- deterministic rule-based routing and rule-based knowledge blocking are now DB-backed
+- the remaining fallback path is still broad: if no support rule, no safe public-knowledge answer, and no LLM route applies, triage escalates with a generic "outside the demo cases" outcome
 
 Why it matters:
 
-- this is acceptable for the deadline, but it is still a compromise
-- if time permits, more of the deterministic routing story should move into rules instead of code
+- this is acceptable for the deadline, but it still leaves the non-LLM fallback story coarse
+- if time permits, the remaining fallback could become more explicit or better-scoped
 
 ## Recommended Next Steps
 
@@ -241,20 +246,17 @@ Expected outcome:
 
 Goal:
 
-- make the best parts of the system obvious in 30 seconds
+- support an actually honest "resent asset" story only if the demo truly needs it
 
 Changes:
 
-- inbox: show category and confidence
-- ticket detail: show summary, escalation reason, handoff note, and tool calls
-- trace page: show input/output payloads and clearer labels such as `Mock tool call`, `Knowledge answer`, or `Human escalation rule`
-- attach tool calls to the relevant agent run
-- make it obvious in the UI when a reply came from public knowledge vs specialist handling vs human escalation
-- consider a stronger visual distinction between inbox rows, ticket metadata, and trace payloads now that base navigation is in place
+- add an explicit `resend_asset` mock tool if the demo truly needs resend claims
+- persist that tool call and attach it to the relevant `AgentRun`
+- expose that tool call clearly in the ticket and trace UI
 
 Expected outcome:
 
-- the reviewer sees a support OS, not just a chat demo
+- resend behavior becomes demonstrably honest instead of implied
 
 ### Step 3. Add guided demo prompts and curate admin
 
@@ -294,12 +296,12 @@ Expected outcome:
 
 Goal:
 
-- further reduce code-path special cases if there is still time
+- tighten the remaining coarse fallback behavior if there is still time
 
 Changes:
 
-- consider moving supported-country, delivery, and provisioning routing hints into additional `SupportRule` data
-- consider replacing the current `OPERATIONAL_TERMS` block with a more explicit rule or classifier boundary
+- consider whether the generic non-LLM fallback escalation should be split into a few clearer bounded cases
+- consider whether more reviewer-facing explanation should be stored when the fallback path is used
 
 Expected outcome:
 
@@ -309,15 +311,13 @@ Expected outcome:
 
 If resuming next session, start here:
 
-1. Add tests for low-confidence triage escalation
-2. Add tests for low-confidence specialist escalation and no-auto-resolve below `0.8`
-3. Upgrade inbox, ticket detail, and trace views beyond the navigation/clickability polish already shipped
-4. Link `ToolCall` records to `AgentRun`
-5. Add an explicit `resend_asset` tool path only if the demo truly needs to claim resend behavior
-6. Tighten knowledge-answer boundaries for weak or irrelevant retrieval hits
-7. Add widget demo prompts and suggested emails
-8. Curate MotorAdmin around `Knowledge::` models and `SupportRule`
-9. Run `rbenv exec bundle exec bin/rails test`
+1. Link `ToolCall` records to `AgentRun` consistently
+2. Tighten the ticket/trace UI so linked vs unlinked operational steps are obvious
+3. Add an explicit `resend_asset` tool path only if the demo truly needs to claim resend behavior
+4. Tighten knowledge-answer boundaries for weak or irrelevant retrieval hits
+5. Add widget demo prompts and suggested emails
+6. Curate MotorAdmin around `Knowledge::` models and `SupportRule`
+7. Run `rbenv exec bundle exec bin/rails test`
 
 ## Key Files
 
@@ -331,6 +331,7 @@ These are the main files to inspect first next session:
 - `app/services/agents/triage_agent.rb`
 - `app/services/agents/specialist_agent.rb`
 - `app/services/support_rule_matcher.rb`
+- `app/models/support_rule.rb`
 - `app/views/tickets/index.html.erb`
 - `app/views/tickets/show.html.erb`
 - `app/views/traces/show.html.erb`
@@ -366,6 +367,7 @@ These are the main files to inspect first next session:
 - use `rbenv exec bundle exec bin/rails test`, not plain `bin/rails test`
 - use `bin/dev` during UI work so `tailwindcss:watch` keeps `app/assets/builds/tailwind.css` up to date
 - `db:seed` now performs live site imports, so network access is required for realistic knowledge seeding
+- after the latest rule-system change, `db:migrate` is required for `support_rules.blocks_public_knowledge`
 - SQLite can throw `database is locked` if multiple test files are run in parallel from separate processes; serial runs are reliable
 
 ## Definition Of "Good Enough To Submit"

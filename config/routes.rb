@@ -7,6 +7,7 @@ Rails.application.routes.draw do
   resources :companies, only: [ :show ], param: :slug
 
   resources :tickets, only: [ :index, :show ] do
+    post :reply, on: :member
     resource :trace, only: [ :show ], controller: "traces"
   end
 

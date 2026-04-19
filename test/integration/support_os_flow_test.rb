@@ -270,6 +270,43 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_select "tr[onclick=\"window.location='#{ticket_path(ticket)}'\"]"
   end
 
+  test "escalated tickets sort to the top and are visually marked as urgent" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "anna@example.com")
+    normal_ticket = company.tickets.create!(
+      customer: customer,
+      status: "awaiting_customer",
+      category: "policy",
+      priority: "normal",
+      channel: "widget",
+      current_layer: "specialist",
+      last_confidence: 0.91,
+      updated_at: 2.hours.ago
+    )
+    escalated_ticket = company.tickets.create!(
+      customer: customer,
+      status: "escalated",
+      category: "delivery",
+      priority: "high",
+      channel: "widget",
+      current_layer: "human",
+      last_confidence: 0.54,
+      updated_at: 3.hours.ago
+    )
+
+    get tickets_path
+
+    assert_response :success
+    assert_match(/##{escalated_ticket.id}.*##{normal_ticket.id}/m, response.body)
+    assert_select "tr.bg-rose-50"
+    assert_select "span", text: "escalated"
+  end
+
   test "ticket detail and trace pages expose operational context" do
     company = Company.create!(
       name: "AI Passport Photo",
@@ -336,6 +373,48 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "external_id"
     assert_includes response.body, "APP-1001"
     assert_includes response.body, "anna@example.com"
+  end
+
+  test "human support can reply from the ticket page" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "anna@example.com")
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "escalated",
+      category: "delivery",
+      priority: "high",
+      channel: "widget",
+      current_layer: "human",
+      escalation_reason: "Needs human review.",
+      handoff_note: "Escalated to support."
+    )
+    ticket.messages.create!(role: "user", content: "I paid but did not receive my file")
+
+    assert_difference "Message.count", 1 do
+      post reply_ticket_path(ticket), params: {
+        message: { content: "I found your order and I am checking the delivery details now." }
+      }
+    end
+
+    assert_redirected_to ticket_path(ticket)
+
+    ticket.reload
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "human", ticket.current_layer
+    assert_nil ticket.escalation_reason
+    assert_nil ticket.handoff_note
+    assert_equal "human", ticket.messages.order(:created_at).last.role
+    assert_includes ticket.messages.order(:created_at).last.content, "checking the delivery details"
+
+    follow_redirect!
+    assert_response :success
+    assert_includes response.body, "Reply as support"
+    assert_includes response.body, "checking the delivery details"
   end
 
   test "motor admin is protected by basic auth backed by rails credentials" do
