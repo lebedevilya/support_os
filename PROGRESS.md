@@ -40,6 +40,9 @@ The core runtime is in place:
 - fallback heuristic behavior still exists when no LLM client is available
 - triage can answer FAQ-style questions directly from `Knowledge::Chunk` retrieval
 - public knowledge import, same-domain link discovery, chunking, and retrieval services now exist
+- public-knowledge replies are LLM-composed from retrieved chunks only; triage does not get tool access
+- public-knowledge citations are now conditional and only appended when the cited URL is one of the retrieved supporting sources
+- widget conversations now run asynchronously through `SupportPipelineJob` with Turbo Streams instead of blocking on the request cycle
 - MotorAdmin is mounted at `/admin` behind HTTP Basic auth backed by Rails credentials
 
 ### Implemented data model
@@ -105,7 +108,19 @@ Current imported public sources:
 
 ### Verified status
 
-The test suite currently passes under the correct Ruby environment:
+The most recently verified flows:
+
+- widget first message renders immediately and shows assistant loading state while `SupportPipelineJob` runs
+- widget follow-up now renders the new user message immediately and streams the assistant reply later
+- widget close action now resolves the conversation in place via Turbo Stream
+- public-knowledge replies no longer attach a generic link to every answer
+
+Most recently re-run tests:
+
+- command: `bin/rails test test/integration/support_os_flow_test.rb test/jobs/support_pipeline_job_test.rb test/services/public_knowledge/support_pipeline_public_answer_test.rb`
+- result: `13 runs, 115 assertions, 0 failures, 0 errors, 0 skips`
+
+Last previously recorded broader suite result:
 
 - command: `rbenv exec bundle exec bin/rails test`
 - result: `23 runs, 142 assertions, 0 failures, 0 errors, 0 skips`
@@ -125,6 +140,9 @@ These planned requirements are already satisfied or mostly satisfied:
 - public knowledge seeded from live company sites instead of placeholder snippets
 - same-domain crawl for support/legal pages during site import
 - knowledge-answer routing is stricter than before and no longer triggers on any incidental chunk hit
+- knowledge answers now remain in `awaiting_customer` and do not auto-close the ticket
+- widget chat now behaves like a real async support flow instead of blocking on the LLM request
+- customer can explicitly close the conversation with `This solved my issue`
 - Rails + Hotwire architecture with a small service-object core
 - seeded demo cases for reviewer walkthroughs
 
@@ -174,8 +192,8 @@ Why it matters:
 
 Current problem:
 
-- the widget does not show guided demo prompts or suggested seeded emails
-- MotorAdmin is mounted, but the knowledge and support-rule workflow has not been curated
+- the core chat loop works now, but the widget still does not show guided demo prompts or suggested seeded emails
+- MotorAdmin is mounted, but the knowledge and support-rule workflow has not been curated for a reviewer walkthrough
 
 Why it matters:
 
@@ -198,7 +216,7 @@ Why it matters:
 
 Do these in this order.
 
-### Step 4. Enforce hard confidence guardrails in the pipeline
+### Step 1. Enforce hard confidence guardrails in the pipeline
 
 Goal:
 
@@ -215,7 +233,7 @@ Expected outcome:
 
 - the bounded-agent story becomes real instead of just documented
 
-### Step 5. Fix honesty in mock operations
+### Step 2. Fix honesty in mock operations
 
 Goal:
 
@@ -231,7 +249,7 @@ Expected outcome:
 
 - the demo becomes defensible and more credible immediately
 
-### Step 6. Upgrade the reviewer-facing UI and trace
+### Step 3. Upgrade the reviewer-facing UI and trace
 
 Goal:
 
@@ -243,12 +261,13 @@ Changes:
 - ticket detail: show summary, escalation reason, handoff note, and tool calls
 - trace page: show input/output payloads and clearer labels such as `Mock tool call`, `Knowledge answer`, or `Human escalation rule`
 - attach tool calls to the relevant agent run
+- make it obvious in the UI when a reply came from public knowledge vs specialist handling vs human escalation
 
 Expected outcome:
 
 - the reviewer sees a support OS, not just a chat demo
 
-### Step 7. Add guided demo prompts and curate admin
+### Step 4. Add guided demo prompts and curate admin
 
 Goal:
 
@@ -264,6 +283,23 @@ Changes:
 Expected outcome:
 
 - the happy-path walkthrough becomes obvious and repeatable
+
+### Step 5. Tighten knowledge-answer boundaries
+
+Goal:
+
+- stop answering from weak or irrelevant retrieved content even when retrieval returns a chunk
+
+Changes:
+
+- reconsider whether `KNOWLEDGE_MIN_SCORE = 2` is strong enough
+- avoid public-knowledge answers when the retrieved content does not actually answer the question
+- prefer specialist or escalation over vague “not found in public info” answers when retrieval confidence is weak
+- add tests around pricing, edge-case policy questions, and irrelevant legal-page retrieval
+
+Expected outcome:
+
+- triage feels more trustworthy and less eager
 
 ### Optional cleanup. Reduce remaining hardcoded triage heuristics
 
@@ -290,9 +326,10 @@ If resuming next session, start here:
 4. Fix delivery honesty with an explicit resend tool path
 5. Link `ToolCall` records to `AgentRun`
 6. Upgrade inbox, ticket detail, and trace views
-7. Add widget demo prompts and suggested emails
-8. Curate MotorAdmin around `Knowledge::` models and `SupportRule`
-9. Run `rbenv exec bundle exec bin/rails test`
+7. Tighten knowledge-answer boundaries for weak or irrelevant retrieval hits
+8. Add widget demo prompts and suggested emails
+9. Curate MotorAdmin around `Knowledge::` models and `SupportRule`
+10. Run `rbenv exec bundle exec bin/rails test`
 
 ## Key Files
 
@@ -312,8 +349,12 @@ These are the main files to inspect first next session:
 - `app/services/public_knowledge/chunker.rb`
 - `app/services/public_knowledge/retriever.rb`
 - `app/services/llm/client.rb`
+- `app/jobs/support_pipeline_job.rb`
 - `app/views/widget/tickets/new.html.erb`
 - `app/views/widget/tickets/_form.html.erb`
+- `app/views/widget/tickets/_chat.html.erb`
+- `app/views/widget/messages/create.turbo_stream.erb`
+- `app/views/widget/tickets/close.turbo_stream.erb`
 - `app/views/tickets/index.html.erb`
 - `app/views/tickets/show.html.erb`
 - `app/views/traces/show.html.erb`
@@ -342,6 +383,8 @@ The project is ready to submit when:
 - hardcoded embassy-refund triage logic is replaced by editable support rules
 - public knowledge is seeded from meaningful live website content
 - public-knowledge answering does not hijack obvious operational requests
+- public-knowledge answers only cite supporting sources when they actually support the answer
+- widget chat feels responsive and conversational instead of blocking on model latency
 - mock operations are honest and clearly labeled
 - confidence guardrails are enforced in code
 - inbox and trace views clearly expose operational state
