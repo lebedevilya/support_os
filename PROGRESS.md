@@ -22,9 +22,10 @@ This is not supposed to be a production support platform. It is supposed to show
 
 ### Implemented surfaces
 
-The four planned product surfaces exist:
+The main product surfaces now exist:
 
 - Overview page: `/`
+- Company landing pages: `/companies/:slug`
 - Customer widget: `/widget/tickets/new`
 - Internal inbox: `/tickets`
 - Ticket detail + dedicated trace page: `/tickets/:id` and `/tickets/:id/trace`
@@ -43,6 +44,7 @@ The core runtime is in place:
 - public-knowledge replies are LLM-composed from retrieved chunks only; triage does not get tool access
 - public-knowledge citations are now conditional and only appended when the cited URL is one of the retrieved supporting sources
 - widget conversations now run asynchronously through `SupportPipelineJob` with Turbo Streams instead of blocking on the request cycle
+- company landing pages now embed the support widget as a bottom-right floating shell instead of forcing users onto a separate widget-only page
 - MotorAdmin is mounted at `/admin` behind HTTP Basic auth backed by Rails credentials
 
 ### Implemented data model
@@ -114,11 +116,15 @@ The most recently verified flows:
 - widget follow-up now renders the new user message immediately and streams the assistant reply later
 - widget close action now resolves the conversation in place via Turbo Stream
 - public-knowledge replies no longer attach a generic link to every answer
+- clicking a company on `/` opens its branded landing page
+- each company page now shows an embedded floating support widget launcher in the bottom-right corner
+- inbox ticket rows are clickable with hover affordance
+- ticket detail and trace pages now include back navigation links
 
 Most recently re-run tests:
 
 - command: `bin/rails test test/integration/support_os_flow_test.rb test/jobs/support_pipeline_job_test.rb test/services/public_knowledge/support_pipeline_public_answer_test.rb`
-- result: `13 runs, 115 assertions, 0 failures, 0 errors, 0 skips`
+- result: `14 runs, 131 assertions, 0 failures, 0 errors, 0 skips`
 
 Last previously recorded broader suite result:
 
@@ -143,6 +149,7 @@ These planned requirements are already satisfied or mostly satisfied:
 - knowledge answers now remain in `awaiting_customer` and do not auto-close the ticket
 - widget chat now behaves like a real async support flow instead of blocking on the LLM request
 - customer can explicitly close the conversation with `This solved my issue`
+- the demo now feels more like a real portfolio product because company cards open branded landing pages with embedded support
 - Rails + Hotwire architecture with a small service-object core
 - seeded demo cases for reviewer walkthroughs
 
@@ -179,9 +186,9 @@ Why it matters:
 Current problem:
 
 - `ToolCall` records are not clearly linked to a specific `AgentRun`
-- inbox does not show category and confidence
-- ticket detail does not fully show summary, escalation reason, handoff note, and tool output context
-- trace page does not show enough payload detail to feel operational
+- inbox rows are clickable now, but still do not show category and confidence
+- ticket detail now has back navigation, but still does not fully show summary, escalation reason, handoff note, and tool output context
+- trace page now has back navigation, but still does not show enough payload detail to feel operational
 
 Why it matters:
 
@@ -192,12 +199,14 @@ Why it matters:
 
 Current problem:
 
-- the core chat loop works now, but the widget still does not show guided demo prompts or suggested seeded emails
+- the embedded widget works now, but it still does not show guided demo prompts or suggested seeded emails
+- the company landing pages are good enough for the demo, but they are still simplified recreations rather than especially faithful versions of the real sites
 - MotorAdmin is mounted, but the knowledge and support-rule workflow has not been curated for a reviewer walkthrough
 
 Why it matters:
 
 - guided walkthroughs should be obvious
+- the landing pages should help the product story, not just host the widget
 - the back office should support the product story, not just exist
 
 ### 5. Triage still contains fallback heuristics for non-rule paths
@@ -262,6 +271,7 @@ Changes:
 - trace page: show input/output payloads and clearer labels such as `Mock tool call`, `Knowledge answer`, or `Human escalation rule`
 - attach tool calls to the relevant agent run
 - make it obvious in the UI when a reply came from public knowledge vs specialist handling vs human escalation
+- consider a stronger visual distinction between inbox rows, ticket metadata, and trace payloads now that base navigation is in place
 
 Expected outcome:
 
@@ -325,7 +335,7 @@ If resuming next session, start here:
 3. Enforce the confidence thresholds in `app/services/support_pipeline.rb`
 4. Fix delivery honesty with an explicit resend tool path
 5. Link `ToolCall` records to `AgentRun`
-6. Upgrade inbox, ticket detail, and trace views
+6. Upgrade inbox, ticket detail, and trace views beyond the navigation/clickability polish already shipped
 7. Tighten knowledge-answer boundaries for weak or irrelevant retrieval hits
 8. Add widget demo prompts and suggested emails
 9. Curate MotorAdmin around `Knowledge::` models and `SupportRule`
@@ -350,9 +360,12 @@ These are the main files to inspect first next session:
 - `app/services/public_knowledge/retriever.rb`
 - `app/services/llm/client.rb`
 - `app/jobs/support_pipeline_job.rb`
+- `app/controllers/companies_controller.rb`
+- `app/views/companies/show.html.erb`
 - `app/views/widget/tickets/new.html.erb`
 - `app/views/widget/tickets/_form.html.erb`
 - `app/views/widget/tickets/_chat.html.erb`
+- `app/views/widget/tickets/_embedded_shell.html.erb`
 - `app/views/widget/messages/create.turbo_stream.erb`
 - `app/views/widget/tickets/close.turbo_stream.erb`
 - `app/views/tickets/index.html.erb`
@@ -373,6 +386,7 @@ These are the main files to inspect first next session:
 - intended Ruby version: `3.4.1`
 - verify with `rbenv`
 - use `rbenv exec bundle exec bin/rails test`, not plain `bin/rails test`
+- use `bin/dev` during UI work so `tailwindcss:watch` keeps `app/assets/builds/tailwind.css` up to date
 - `db:seed` now performs live site imports, so network access is required for realistic knowledge seeding
 - SQLite can throw `database is locked` if multiple test files are run in parallel from separate processes; serial runs are reliable
 
@@ -385,6 +399,7 @@ The project is ready to submit when:
 - public-knowledge answering does not hijack obvious operational requests
 - public-knowledge answers only cite supporting sources when they actually support the answer
 - widget chat feels responsive and conversational instead of blocking on model latency
+- company landing pages make the demo feel like a real product surface instead of a widget sandbox
 - mock operations are honest and clearly labeled
 - confidence guardrails are enforced in code
 - inbox and trace views clearly expose operational state
