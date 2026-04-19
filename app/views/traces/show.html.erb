@@ -1,5 +1,6 @@
 <div class="mx-auto w-full max-w-4xl space-y-8">
   <header>
+    <%= link_to "← Back to ticket", ticket_path(@ticket), class: "text-sm font-semibold text-slate-600 transition hover:text-slate-900" %>
     <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Dedicated Trace</p>
     <h1 class="text-3xl font-bold text-slate-900">Ticket #<%= @ticket.id %> trace</h1>
   </header>

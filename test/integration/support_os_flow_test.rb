@@ -6,6 +6,19 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
 
   test "overview page renders support os framing" do
+    aipassportphoto = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    nodes_garden = Company.create!(
+      name: "nodes.garden",
+      slug: "nodes-garden",
+      description: "Node deployment and provisioning support",
+      support_email: "support@nodes.garden"
+    )
+
     get root_path
 
     assert_response :success
@@ -13,6 +26,27 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "portfolio-wide support operating system"
     assert_includes response.body, "AI Passport Photo"
     assert_includes response.body, "nodes.garden"
+    assert_select "a[href='#{company_path(aipassportphoto.slug)}']", text: /AI Passport Photo/
+    assert_select "a[href='#{company_path(nodes_garden.slug)}']", text: /nodes\.garden/
+  end
+
+  test "company landing page renders branded page with embedded widget shell" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+
+    get company_path(company.slug)
+
+    assert_response :success
+    assert_includes response.body, "AI Passport Photo"
+    assert_select "[data-controller='widget-shell']"
+    assert_select "turbo-frame#support_widget"
+    assert_select "input[type='hidden'][name='ticket[company_id]'][value='#{company.id}']"
+    assert_select "select[name='ticket[company_id]']", count: 0
+    assert_select "button", text: /Chat with support/
   end
 
   test "widget entry page renders company and customer fields" do

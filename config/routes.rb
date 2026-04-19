@@ -4,6 +4,8 @@ Rails.application.routes.draw do
 
   mount Motor::Admin => "/admin", as: "motor_admin"
 
+  resources :companies, only: [ :show ], param: :slug
+
   resources :tickets, only: [ :index, :show ] do
     resource :trace, only: [ :show ], controller: "traces"
   end

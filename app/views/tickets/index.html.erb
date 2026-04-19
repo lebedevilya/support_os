@@ -18,8 +18,11 @@
       </thead>
       <tbody class="divide-y divide-slate-100">
         <% @tickets.each do |ticket| %>
-          <tr>
-            <td class="px-4 py-3"><%= link_to "##{ticket.id}", ticket_path(ticket), class: "font-semibold text-slate-900" %></td>
+          <tr
+            class="cursor-pointer transition hover:bg-slate-50"
+            onclick="window.location='<%= ticket_path(ticket) %>'"
+          >
+            <td class="px-4 py-3"><%= link_to "##{ticket.id}", ticket_path(ticket), class: "font-semibold text-slate-900 underline-offset-2 hover:underline", onclick: "event.stopPropagation();" %></td>
             <td class="px-4 py-3"><%= ticket.company.name %></td>
             <td class="px-4 py-3"><%= ticket.customer.email %></td>
             <td class="px-4 py-3"><%= ticket.status %></td>
