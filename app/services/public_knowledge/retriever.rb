@@ -1,5 +1,6 @@
 module PublicKnowledge
   class Retriever
+    Match = Struct.new(:chunk, :score, keyword_init: true)
     MAX_RESULTS = 3
 
     TERM_EXPANSIONS = {
@@ -17,6 +18,10 @@ module PublicKnowledge
     end
 
     def call
+      matches.map(&:chunk)
+    end
+
+    def matches
       candidate_terms = expanded_terms
 
       @company.knowledge_chunks
@@ -25,11 +30,10 @@ module PublicKnowledge
           score = score(chunk.content.downcase, candidate_terms)
           next if score.zero?
 
-          [ chunk, score ]
+          Match.new(chunk: chunk, score: score)
         end
-        .sort_by { |(_, score)| -score }
+        .sort_by { |match| -match.score }
         .first(MAX_RESULTS)
-        .map(&:first)
     end
 
     private

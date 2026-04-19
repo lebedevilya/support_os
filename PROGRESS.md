@@ -34,17 +34,17 @@ The four planned product surfaces exist:
 The core runtime is in place:
 
 - `SupportPipeline` orchestrates triage, specialist handling, ticket updates, trace storage, and outbound messages
-- `Agents::TriageAgent` exists
+- `Agents::TriageAgent` exists and now checks DB-backed support rules before knowledge retrieval
 - `Agents::SpecialistAgent` exists
 - `LLM::Client` uses `ruby_llm` while preserving the app-level workflow API
-- fallback heuristic behavior exists when no LLM client is available
+- fallback heuristic behavior still exists when no LLM client is available
 - triage can answer FAQ-style questions directly from `Knowledge::Chunk` retrieval
-- public knowledge import, chunking, and retrieval services exist
+- public knowledge import, same-domain link discovery, chunking, and retrieval services now exist
 - MotorAdmin is mounted at `/admin` behind HTTP Basic auth backed by Rails credentials
 
 ### Implemented data model
 
-The schema already includes the main demo entities:
+The schema now includes the main demo entities plus editable support routing:
 
 - `Company`
 - `Customer`
@@ -57,6 +57,7 @@ The schema already includes the main demo entities:
 - `Knowledge::ManualEntry`
 - `Knowledge::Chunk`
 - `BusinessRecord`
+- `SupportRule`
 
 ### Seeded demo setup
 
@@ -69,18 +70,45 @@ Seed data already includes:
 
 - company records
 - knowledge articles
-- public knowledge source records and generated chunks
+- support rules
+- public knowledge source records imported from live sites
+- generated chunks from imported pages
 - mock business records
 - seeded tickets for the main walkthroughs
+
+The seed flow now uses `PublicKnowledge::SiteImporter` instead of handwritten `Knowledge::Source` snippets.
+
+### Verified live knowledge import
+
+`db:seed` was run after the importer changes with live network access.
+
+Current imported public sources:
+
+- `aipassportphoto`
+  - `https://www.aipassportphoto.co/`
+  - `https://www.aipassportphoto.co/contact`
+  - `https://www.aipassportphoto.co/guarantee`
+  - `https://www.aipassportphoto.co/privacy`
+  - `https://www.aipassportphoto.co/terms`
+  - current chunk count observed after seed: `66`
+- `nodes-garden`
+  - `https://nodes.garden/`
+  - `https://nodes.garden/dashboard`
+  - `https://nodes.garden/pages/about`
+  - `https://nodes.garden/pages/commerce_stripe_disclosure`
+  - `https://nodes.garden/pages/crypto_node`
+  - `https://nodes.garden/pages/faq`
+  - `https://nodes.garden/pages/partners`
+  - `https://nodes.garden/pages/privacy_policy`
+  - `https://nodes.garden/pages/terms_of_service`
+  - current chunk count observed after seed: `97`
 
 ### Verified status
 
 The test suite currently passes under the correct Ruby environment:
 
 - command: `rbenv exec bundle exec bin/rails test`
-- result: `14 runs, 102 assertions, 0 failures, 0 errors, 0 skips`
-
-The git worktree was clean at the start of this session.
+- result: `23 runs, 142 assertions, 0 failures, 0 errors, 0 skips`
 
 ## What Matches The Plan
 
@@ -93,6 +121,10 @@ These planned requirements are already satisfied or mostly satisfied:
 - human escalation represented as ticket state plus handoff note
 - dedicated trace persistence using `AgentRun` and `ToolCall`
 - mock/local business operations instead of real integrations
+- editable DB-backed triage overrides via `SupportRule`
+- public knowledge seeded from live company sites instead of placeholder snippets
+- same-domain crawl for support/legal pages during site import
+- knowledge-answer routing is stricter than before and no longer triggers on any incidental chunk hit
 - Rails + Hotwire architecture with a small service-object core
 - seeded demo cases for reviewer walkthroughs
 
@@ -100,44 +132,7 @@ These planned requirements are already satisfied or mostly satisfied:
 
 These are the main gaps between the current code and the intended demo quality.
 
-### 1. Triage still contains hardcoded policy paths
-
-Current problem:
-
-- `Agents::TriageAgent` still has hardcoded checks like `embassy_refund?`, `supported_country?`, `missing_asset?`, and `provisioning_status?`
-- those rules are not editable by humans and do not fit the "support operating layer" story
-
-Why it matters:
-
-- this is the wrong abstraction for a demo about agent-managed operations
-- the reviewer should be able to see that routing policy can be adjusted without code changes
-
-### 2. Knowledge exists, but the seeded content is too thin to be useful
-
-Current problem:
-
-- `Knowledge::Source` and `Knowledge::Chunk` exist, but the current seeds use short handwritten snippets in `db/seeds.rb`
-- the imported knowledge does not yet feel like real public support context from company websites
-- retrieval can technically work, but the underlying content is not strong enough to justify the feature
-
-Why it matters:
-
-- the current state oversells the knowledge layer
-- if the reviewer inspects `/admin` or the trace, the knowledge system looks shallow
-
-### 3. Public-knowledge answering is too eager
-
-Current problem:
-
-- triage resolves from public knowledge whenever retrieval returns any chunk
-- there is no real confidence gate or operational-intent filter on that path
-
-Why it matters:
-
-- mixed or operational requests can be incorrectly treated as FAQ resolutions
-- this weakens the bounded-agent story
-
-### 4. Guardrails are documented but not enforced
+### 1. Confidence guardrails are still documented but not enforced
 
 Current problem:
 
@@ -146,14 +141,14 @@ Current problem:
 
 Why it matters:
 
-- the code currently tells a weaker story than the technical plan
+- the code still tells a weaker story than the technical plan
 - the demo claims bounded automation but still trusts weak outputs
 
-### 5. Delivery flow is not honest enough
+### 2. Delivery flow is not honest enough
 
 Current problem:
 
-- the delivery specialist claims the asset was resent when a matching record exists
+- the delivery specialist still claims the asset was resent when a matching record exists
 - no explicit resend tool call or verified resend state backs that claim
 
 Why it matters:
@@ -161,7 +156,7 @@ Why it matters:
 - this breaks the honest-demo requirement
 - it is an easy thing for a reviewer to distrust
 
-### 6. Trace linkage and reviewer-facing UI are underpowered
+### 3. Trace linkage and reviewer-facing UI are underpowered
 
 Current problem:
 
@@ -175,74 +170,33 @@ Why it matters:
 - the backend captures more than the UI reveals
 - the reviewer may miss the strongest part of the implementation
 
-### 7. Widget and admin are still rough
+### 4. Widget and admin are still rough
 
 Current problem:
 
 - the widget does not show guided demo prompts or suggested seeded emails
-- MotorAdmin is mounted, but the knowledge and future support-rule workflow has not been curated
+- MotorAdmin is mounted, but the knowledge and support-rule workflow has not been curated
 
 Why it matters:
 
 - guided walkthroughs should be obvious
 - the back office should support the product story, not just exist
 
+### 5. Triage still contains fallback heuristics for non-rule paths
+
+Current problem:
+
+- the embassy refund path is now DB-backed, but `supported_country?`, `missing_asset?`, and `provisioning_status?` are still hardcoded fallback heuristics
+- `OPERATIONAL_TERMS` for blocking knowledge answers is also heuristic logic in code
+
+Why it matters:
+
+- this is acceptable for the deadline, but it is still a compromise
+- if time permits, more of the deterministic routing story should move into rules instead of code
+
 ## Recommended Next Steps
 
 Do these in this order.
-
-### Step 1. Replace hardcoded triage rules with DB-backed support rules
-
-Goal:
-
-- move deterministic routing overrides out of `Agents::TriageAgent` and into editable data
-
-Changes:
-
-- add a `SupportRule` model
-- support both global rules and company-specific rules
-- keep scope narrow: routing overrides only, not a generic policy engine
-- add a matcher service that returns normalized triage results from active rules
-- seed at least the current embassy-refund escalation path as a rule
-- expose the new rule records in MotorAdmin
-
-Expected outcome:
-
-- the support-routing story becomes more credible and easier to demonstrate
-
-### Step 2. Replace weak knowledge seeds with website-derived public knowledge
-
-Goal:
-
-- make the knowledge layer worth having
-
-Changes:
-
-- import meaningful text from the real public pages for both demo companies
-- keep the imported content text-only and chunked
-- seed richer `Knowledge::Source` and `Knowledge::Chunk` data from those pages instead of short manual snippets
-- keep manual entries available only for small operator-added gaps
-
-Expected outcome:
-
-- FAQ retrieval is grounded in believable company knowledge instead of placeholder text
-
-### Step 3. Tighten triage behavior around knowledge answers
-
-Goal:
-
-- stop public knowledge from resolving requests too aggressively
-
-Changes:
-
-- check support-rule overrides before knowledge retrieval
-- require stronger retrieval quality before `knowledge_answer`
-- avoid resolving obvious operational or sensitive requests from public knowledge alone
-- add tests for FAQ resolution versus operational fallthrough
-
-Expected outcome:
-
-- triage behaves more like a bounded first-line system and less like a keyword shortcut
 
 ### Step 4. Enforce hard confidence guardrails in the pipeline
 
@@ -311,23 +265,34 @@ Expected outcome:
 
 - the happy-path walkthrough becomes obvious and repeatable
 
+### Optional cleanup. Reduce remaining hardcoded triage heuristics
+
+Goal:
+
+- further reduce code-path special cases if there is still time
+
+Changes:
+
+- consider moving supported-country, delivery, and provisioning routing hints into additional `SupportRule` data
+- consider replacing the current `OPERATIONAL_TERMS` block with a more explicit rule or classifier boundary
+
+Expected outcome:
+
+- a cleaner operating-layer story, but this is lower priority than guardrails, honesty, and UI
+
 ## Suggested Immediate Execution Plan
 
 If resuming next session, start here:
 
-1. Add tests for a new `SupportRule` matcher and triage override path
-2. Add the `SupportRule` schema, model, and matcher service
-3. Replace hardcoded triage methods with rule evaluation
-4. Seed global and company-specific support rules
-5. Audit the real company websites and replace thin knowledge seeds with imported text
-6. Add tests for stronger public-knowledge routing behavior
-7. Enforce confidence guardrails in `app/services/support_pipeline.rb`
-8. Fix delivery honesty with an explicit resend tool path
-9. Link `ToolCall` records to `AgentRun`
-10. Upgrade inbox, ticket detail, and trace views
-11. Add widget demo prompts and suggested emails
-12. Curate MotorAdmin around `Knowledge::` models and `SupportRule`
-13. Run `rbenv exec bundle exec bin/rails test`
+1. Add tests for low-confidence triage escalation
+2. Add tests for low-confidence specialist escalation and no-auto-resolve below `0.8`
+3. Enforce the confidence thresholds in `app/services/support_pipeline.rb`
+4. Fix delivery honesty with an explicit resend tool path
+5. Link `ToolCall` records to `AgentRun`
+6. Upgrade inbox, ticket detail, and trace views
+7. Add widget demo prompts and suggested emails
+8. Curate MotorAdmin around `Knowledge::` models and `SupportRule`
+9. Run `rbenv exec bundle exec bin/rails test`
 
 ## Key Files
 
@@ -335,24 +300,29 @@ These are the main files to inspect first next session:
 
 - `PROPOSAL.md`
 - `TECH.md`
+- `PROGRESS.md`
 - `db/seeds.rb`
 - `app/services/support_pipeline.rb`
 - `app/services/agents/triage_agent.rb`
 - `app/services/agents/specialist_agent.rb`
+- `app/services/support_rule_matcher.rb`
 - `app/services/public_knowledge/importer.rb`
+- `app/services/public_knowledge/link_discoverer.rb`
+- `app/services/public_knowledge/site_importer.rb`
 - `app/services/public_knowledge/chunker.rb`
 - `app/services/public_knowledge/retriever.rb`
 - `app/services/llm/client.rb`
-- `config/routes.rb`
-- `config/initializers/motor_admin.rb`
-- `app/views/home/index.html.erb`
 - `app/views/widget/tickets/new.html.erb`
 - `app/views/widget/tickets/_form.html.erb`
 - `app/views/tickets/index.html.erb`
 - `app/views/tickets/show.html.erb`
 - `app/views/traces/show.html.erb`
 - `test/services/support_pipeline_test.rb`
+- `test/services/support_pipeline_support_rule_test.rb`
+- `test/services/support_rule_matcher_test.rb`
 - `test/services/public_knowledge/importer_test.rb`
+- `test/services/public_knowledge/link_discoverer_test.rb`
+- `test/services/public_knowledge/site_importer_test.rb`
 - `test/services/public_knowledge/retriever_test.rb`
 - `test/services/public_knowledge/support_pipeline_public_answer_test.rb`
 - `test/integration/support_os_flow_test.rb`
@@ -362,13 +332,16 @@ These are the main files to inspect first next session:
 - intended Ruby version: `3.4.1`
 - verify with `rbenv`
 - use `rbenv exec bundle exec bin/rails test`, not plain `bin/rails test`
+- `db:seed` now performs live site imports, so network access is required for realistic knowledge seeding
+- SQLite can throw `database is locked` if multiple test files are run in parallel from separate processes; serial runs are reliable
 
 ## Definition Of "Good Enough To Submit"
 
 The project is ready to submit when:
 
-- hardcoded triage policy paths are replaced by editable support rules
-- public knowledge is seeded from meaningful website content
+- hardcoded embassy-refund triage logic is replaced by editable support rules
+- public knowledge is seeded from meaningful live website content
+- public-knowledge answering does not hijack obvious operational requests
 - mock operations are honest and clearly labeled
 - confidence guardrails are enforced in code
 - inbox and trace views clearly expose operational state

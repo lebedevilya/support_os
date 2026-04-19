@@ -1,5 +1,24 @@
 module Agents
   class TriageAgent
+    KNOWLEDGE_MIN_SCORE = 2
+    OPERATIONAL_TERMS = [
+      "paid",
+      "payment",
+      "refund",
+      "rejected",
+      "did not receive",
+      "didn't receive",
+      "download link",
+      "my file",
+      "my order",
+      "used the wrong email",
+      "wrong email",
+      "my node",
+      "provisioning",
+      "invoice",
+      "receipt"
+    ].freeze
+
     def initialize(ticket:, llm_client: nil)
       @ticket = ticket
       @llm_client = llm_client
@@ -83,10 +102,13 @@ module Agents
     end
 
     def knowledge_answer
-      chunks = PublicKnowledge::Retriever.new(company: @ticket.company, query: latest_message.content).call
-      return if chunks.empty?
+      return if operational_or_sensitive_request?
 
-      best_chunk = chunks.first
+      matches = PublicKnowledge::Retriever.new(company: @ticket.company, query: latest_message.content).matches
+      return if matches.empty?
+      return if matches.first.score < KNOWLEDGE_MIN_SCORE
+
+      best_chunk = matches.first.chunk
 
       {
         source: "public_knowledge",
@@ -173,6 +195,11 @@ module Agents
 
     def latest_message
       @ticket.messages.order(:created_at).last
+    end
+
+    def operational_or_sensitive_request?
+      content = latest_message.content.downcase
+      OPERATIONAL_TERMS.any? { |term| content.include?(term) }
     end
 
     def normalized_category(value)
