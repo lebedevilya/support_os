@@ -22,6 +22,23 @@ module ApplicationHelper
     value.to_s
   end
 
+  def agent_source_label(snapshot)
+    source = parse_json_like(snapshot)["source"].to_s
+
+    case source
+    when "support_rule" then "Support rule"
+    when "public_knowledge" then "Public knowledge"
+    when "public_knowledge_llm" then "Public knowledge + LLM"
+    when "llm" then "LLM"
+    when "llm_error_fallback" then "LLM fallback"
+    when "fallback" then "Fallback"
+    else
+      source.presence || "Unknown"
+    end
+  rescue JSON::ParserError, TypeError, NoMethodError
+    "Unknown"
+  end
+
   private
 
   def parse_json_like(value)

@@ -322,11 +322,14 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
       priority: "high",
       channel: "widget",
       current_layer: "human",
+      manual_takeover: true,
       last_confidence: 0.64,
       summary: "Delivery request could not be safely completed automatically.",
       escalation_reason: "Automation confidence 0.64 was below the required threshold of 0.7.",
       handoff_note: "Escalated for human review because specialist confidence was below the automation threshold."
     )
+    ticket.tag_list = [ "delivery", "human-review" ]
+    ticket.save!
     ticket.messages.create!(role: "user", content: "I paid but did not receive my file")
     ticket.messages.create!(role: "human", content: "Escalated for human review because specialist confidence was below the automation threshold.")
     agent_run = ticket.agent_runs.create!(
@@ -363,12 +366,17 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Back to tickets"
     assert_includes response.body, "Delivery request could not be safely completed automatically."
     assert_includes response.body, "Automation confidence 0.64 was below the required threshold of 0.7."
+    assert_includes response.body, "Human-owned ticket"
+    assert_includes response.body, "New customer replies now stay with support"
+    assert_includes response.body, "delivery"
+    assert_includes response.body, "human-review"
     assert_includes response.body, "lookup_photo_request"
 
     get ticket_trace_path(ticket)
 
     assert_response :success
     assert_includes response.body, "Back to ticket"
+    assert_includes response.body, "Manual takeover is active"
     assert_includes response.body, "Escalated by pipeline confidence guardrail."
     assert_includes response.body, "external_id"
     assert_includes response.body, "APP-1001"

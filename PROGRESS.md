@@ -139,11 +139,14 @@ The most recently verified flows:
 - `supported_country?`, `missing_asset?`, and `provisioning_status?` have been removed from `TriageAgent`
 - automatic ticket tagging now works across triage, specialist, knowledge-answer, and support-rule paths
 - the inbox now supports company/status/tag filtering plus count summaries and pagination
+- once support replies manually, subsequent customer follow-ups stay on the human-owned ticket path and do not trigger `SupportPipelineJob`
+- ticket replies from the human support page now redirect back to the reply section instead of jumping to the top
+- inbox company/status/tag summaries now render inside collapsible dropdown sections instead of dumping every item inline
 
 Most recently re-run tests:
 
 - command: `bin/rails test test/services/support_pipeline_test.rb test/services/public_knowledge/support_pipeline_public_answer_test.rb test/jobs/support_pipeline_job_test.rb test/integration/support_os_flow_test.rb test/services/support_pipeline_support_rule_test.rb test/services/support_rule_matcher_test.rb`
-- result: `33 runs, 291 assertions, 0 failures, 0 errors, 0 skips`
+- result: `35 runs, 312 assertions, 0 failures, 0 errors, 0 skips`
 
 Last previously recorded broader suite result:
 
@@ -173,6 +176,7 @@ These planned requirements are already satisfied or mostly satisfied:
 - the demo now feels more like a real portfolio product because company cards open branded landing pages with embedded support
 - the internal inbox now behaves like a usable operations surface with filtering, tag summaries, and pagination
 - the ticket model now carries editable tag data instead of forcing support classification to live only in code
+- manual takeover is now explicit: once support replies, the ticket becomes human-owned and automation stops for later customer follow-ups
 - Rails + Hotwire architecture with a small service-object core
 - seeded demo cases for reviewer walkthroughs
 
@@ -192,7 +196,7 @@ Why it matters:
 
 - the credibility problem is smaller now, but the operational story is still incomplete
 
-### 2. Trace linkage and reviewer-facing UI are underpowered
+### 2. Trace linkage and reviewer-facing UI are still underpowered
 
 Current problem:
 
@@ -205,7 +209,20 @@ Why it matters:
 - the backend captures more than the UI reveals
 - the reviewer may miss the strongest part of the implementation
 
-### 3. Knowledge and admin are still rough
+### 3. Human support UX is only partially done
+
+Current problem:
+
+- manual takeover is now enforced correctly, which is necessary
+- but the human workflow is still thin after takeover: ticket detail does not yet surface tags clearly, status semantics are still basic, and the trace/ticket story is still too subtle
+- there is still no clear "this ticket is now fully manual" treatment in the internal UI beyond the underlying state
+
+Why it matters:
+
+- the ownership model is now correct, but the operator UX is still weak
+- this is where the product either becomes a believable support console or stays a demo
+
+### 4. Knowledge and admin are still rough
 
 Current problem:
 
@@ -220,7 +237,7 @@ Why it matters:
 - the landing pages should help the product story, not just host the widget
 - the back office should support the product story, not just exist
 
-### 4. Automatic tagging is still basic
+### 5. Automatic tagging is still basic
 
 Current problem:
 
@@ -233,7 +250,7 @@ Why it matters:
 - tags are only useful if they stay clean
 - without curation, the tag layer can drift into noisy metadata instead of becoming a durable operational tool
 
-### 5. Triage still has one coarse fallback path
+### 6. Triage still has one coarse fallback path
 
 Current problem:
 
@@ -249,17 +266,23 @@ Why it matters:
 
 Do these in this order.
 
-### Step 1. Make the human support workflow real
+### Step 1. Finish the human support console
 
 Goal:
 
-- make escalated tickets actually workable for a human operator
+- make the manually owned ticket flow feel like an actual support tool
 
 Changes:
 
+- surface tags on ticket detail
+- tighten status language and visual states for human-owned tickets
+- improve trace/ticket labeling so the operator can instantly tell what automation already did and what is now manual
+- make manual takeover visually obvious across inbox and ticket detail
 - attach `ToolCall` records to the relevant `AgentRun` consistently
-- improve ticket detail and trace labels so the human can see what the system already did
-- make escalated tickets visually dominant and easy to clear after a manual reply
+
+Expected outcome:
+
+- the reviewer sees a believable human-support workflow after escalation instead of just a reply box
 
 ### Step 2. Tighten knowledge quality
 
@@ -290,14 +313,16 @@ Expected outcome:
 
 - the reviewer sees a support OS, not just a chat demo
 
-### Step 2. Add an honest mock resend path if needed
+### Step 4. Fix trace linkage and add an honest mock resend path if needed
 
 Goal:
 
-- support an actually honest "resent asset" story only if the demo truly needs it
+- support an actually honest operational story only where the demo truly needs it
 
 Changes:
 
+- improve `ToolCall` to `AgentRun` linkage so traces stop showing `unlinked`
+- expose tool/run relationships more clearly in the ticket and trace UI
 - add an explicit `resend_asset` mock tool if the demo truly needs resend claims
 - persist that tool call and attach it to the relevant `AgentRun`
 - expose that tool call clearly in the ticket and trace UI
@@ -306,7 +331,7 @@ Expected outcome:
 
 - resend behavior becomes demonstrably honest instead of implied
 
-### Step 3. Add guided demo prompts and curate admin
+### Step 5. Add guided demo prompts and curate admin
 
 Goal:
 
