@@ -1,3 +1,5 @@
+<img width="871" height="538" alt="image" src="https://github.com/user-attachments/assets/462b3d79-8923-4446-8ef4-f990a1dadb06" />
+
 # SupportOS
 
 SupportOS is a Rails + Hotwire demo of a shared support layer for multiple startups.
