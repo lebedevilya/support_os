@@ -23,6 +23,7 @@ registry:
 
 builder:
   arch: amd64
+  remote: ssh://debian@147.135.78.29
 
 volumes:
   - "/home/debian/apps/support_os/storage:/rails/storage"
