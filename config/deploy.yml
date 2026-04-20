@@ -31,6 +31,7 @@ volumes:
 env:
   clear:
     RAILS_LOG_LEVEL: info
+    RAILS_FORCE_SSL: "false"
     RAILS_SERVE_STATIC_FILES: "true"
     SOLID_QUEUE_IN_PUMA: "true"
   secret:
