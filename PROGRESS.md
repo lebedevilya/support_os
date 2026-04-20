@@ -58,6 +58,7 @@ The core runtime is in place:
 - curated `Knowledge::ManualEntry` records are now part of the public-knowledge strategy instead of relying only on imported website text
 - manual-entry chunk indexing now lives in a dedicated `Knowledge::ManualEntryIndexer` service rather than hidden model logic
 - public-knowledge retrieval now stays generic in code while preferring curated manual entries over noisy imported chunks
+- demo deployment wiring now exists through Kamal with a single-server SQLite production path and persistent `storage/` volume mounting
 
 ### Implemented data model
 
@@ -151,6 +152,9 @@ The most recently verified flows:
 - the company-scoped new-ticket frame now stays scrollable after closing and reopening a chat
 - escalated or human-owned widget conversations now show a customer-facing waiting state instead of exposing raw operator handoff wording
 - the embedded company widget header now shows the active customer email once the conversation starts
+- Kamal config now resolves locally and targets the existing DigitalOcean host with persistent SQLite storage
+- the target server is reachable over SSH and has Docker available
+- the only deploy blocker seen in this session was GHCR authentication during `docker login`
 
 Most recently re-run tests:
 
@@ -161,6 +165,20 @@ Latest full-suite result:
 
 - command: `PARALLEL_WORKERS=1 bin/rails test`
 - result: `60 runs, 498 assertions, 0 failures, 0 errors, 0 skips`
+
+### Deployment state
+
+Current repo deploy wiring:
+
+- `config/deploy.yml` exists for Kamal
+- production SQLite paths are now explicitly configured in `config/database.yml`
+- `.kamal/secrets` now provides `RAILS_MASTER_KEY` from `config/master.key`
+- the server-side persistent storage path `/home/debian/apps/support_os/storage` has already been created
+
+Current blocker:
+
+- the last attempted `kamal setup` reached the server successfully but failed on `docker login ghcr.io`
+- this means the remaining issue is registry authentication, not the VPS or SSH path
 
 ## What Matches The Plan
 
@@ -248,7 +266,23 @@ Why it matters:
 
 Do these in this order.
 
-### Step 1. Tighten knowledge quality
+### Step 1. Finish deployment
+
+Goal:
+
+- get the demo reachable on the existing server
+
+Changes:
+
+- complete GHCR authentication with a token that can publish `ghcr.io/lebedevilya/support_os`
+- run `kamal setup`
+- verify `/up`, the company pages, widget flow, and a seeded specialist action case in production
+
+Expected outcome:
+
+- the reviewer can access the deployed demo instead of only running it locally
+
+### Step 2. Tighten knowledge quality
 
 Goal:
 
@@ -265,7 +299,7 @@ Expected outcome:
 
 - triage knowledge answers feel more intentional and less noisy
 
-### Step 2. Improve tag operations
+### Step 3. Improve tag operations
 
 Goal:
 
@@ -281,7 +315,7 @@ Expected outcome:
 
 - the reviewer sees a support OS, not just a chat demo
 
-### Step 3. Finish the human support console
+### Step 4. Finish the human support console
 
 Goal:
 
@@ -297,7 +331,7 @@ Expected outcome:
 
 - the reviewer sees a believable human-support workflow after escalation instead of just a reply box
 
-### Step 4. Add guided showcase polish where it helps the walkthrough
+### Step 5. Add guided showcase polish where it helps the walkthrough
 
 Changes:
 

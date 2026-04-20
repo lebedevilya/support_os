@@ -1,0 +1,39 @@
+service: support_os
+
+image: lebedevilya/support_os
+
+servers:
+  web:
+    - 147.135.78.29
+
+proxy:
+  ssl: false
+  host: 147.135.78.29
+  app_port: 3000
+  healthcheck:
+    path: /up
+    interval: 3
+    timeout: 30
+
+registry:
+  server: ghcr.io
+  username: <%= ENV.fetch("KAMAL_REGISTRY_USERNAME", "lebedevilya") %>
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+builder:
+  arch: amd64
+
+volumes:
+  - "/home/debian/apps/support_os/storage:/rails/storage"
+
+env:
+  clear:
+    RAILS_LOG_LEVEL: info
+    RAILS_SERVE_STATIC_FILES: "true"
+    SOLID_QUEUE_IN_PUMA: "true"
+  secret:
+    - RAILS_MASTER_KEY
+
+ssh:
+  user: debian
