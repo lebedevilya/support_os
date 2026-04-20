@@ -1,7 +1,7 @@
 <%= turbo_stream_from ticket %>
 
-<div id="<%= dom_id(ticket, :chat) %>" class="space-y-6">
-  <div class="space-y-3">
+<div id="<%= dom_id(ticket, :chat) %>" class="flex h-full min-h-0 flex-col" data-controller="auto-scroll">
+  <div class="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1" data-auto-scroll-target="viewport">
     <% ticket.messages.order(:created_at).each do |message| %>
       <%= render "widget/tickets/message", message: message %>
     <% end %>
@@ -9,29 +9,40 @@
     <% if ticket.processing? %>
       <div data-role="assistant-loading" class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
         <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">assistant</p>
-        <p class="mt-2 text-sm leading-6 text-slate-800">Loading...</p>
+        <div class="mt-3 flex items-center gap-2 text-sm text-slate-800" aria-live="polite" aria-label="Assistant is typing">
+          <span class="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-slate-400 [animation-delay:0ms]"></span>
+          <span class="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-slate-400 [animation-delay:150ms]"></span>
+          <span class="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-slate-400 [animation-delay:300ms]"></span>
+          <span class="ml-1 text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Thinking</span>
+        </div>
       </div>
     <% end %>
   </div>
 
   <% if ticket.status == "resolved" %>
-    <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+    <div class="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
       This conversation is closed.
     </div>
   <% elsif ticket.processing? %>
-    <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+    <div class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
       Your message was submitted. The assistant reply will appear here automatically.
     </div>
   <% else %>
-    <div class="flex flex-wrap gap-3">
+    <%= form_with url: widget_ticket_messages_path(ticket), scope: :message, class: "mt-4 space-y-3" do |form| %>
+      <div class="flex items-end gap-3">
+        <%= form.text_area :content, rows: 1, class: "block min-h-[3.5rem] flex-1 resize-none rounded-2xl border border-slate-300 px-4 py-3", data: { controller: "enter-submit", action: "keydown->enter-submit#submitOnEnter" } %>
+        <%= form.button type: :submit, class: "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white transition hover:bg-slate-800", aria: { label: "Send message" } do %>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-5 w-5 fill-current" aria-hidden="true">
+            <path d="M21.8 2.2a1 1 0 0 0-1.05-.24l-17 6a1 1 0 0 0 .04 1.9l7.05 2.21 2.21 7.05a1 1 0 0 0 .9.7h.06a1 1 0 0 0 .92-.59l6-17a1 1 0 0 0-.13-1.03ZM13.9 16.7l-1.53-4.87a1 1 0 0 0-.63-.63L6.87 9.67l11.85-4.18Z"/>
+          </svg>
+        <% end %>
+      </div>
+    <% end %>
+
+    <div class="mt-4 flex justify-start">
       <%= form_with url: close_widget_ticket_path(ticket), method: :patch, class: "inline" do %>
-        <%= submit_tag "This solved my issue", class: "rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white" %>
+        <%= submit_tag "Close the ticket", class: "rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900" %>
       <% end %>
     </div>
-
-    <%= form_with url: widget_ticket_messages_path(ticket), scope: :message, class: "space-y-3" do |form| %>
-      <%= form.text_area :content, rows: 4, class: "block w-full rounded-2xl border border-slate-300 px-4 py-3", data: { controller: "enter-submit", action: "keydown->enter-submit#submitOnEnter" } %>
-      <%= form.submit "Send follow-up", class: "rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900" %>
-    <% end %>
   <% end %>
 </div>

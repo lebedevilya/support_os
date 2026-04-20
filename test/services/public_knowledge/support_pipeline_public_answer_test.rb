@@ -35,6 +35,11 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
 
     llm_client = FakeKnowledgeLlmClient.new(
       {
+        needs_human_handoff: false,
+        confidence: 0.94,
+        reasoning_summary: "The customer is not explicitly asking for a human handoff."
+      },
+      {
         reply: "It usually takes under 60 seconds.",
         confidence: 0.93,
         reasoning_summary: "Answered from the homepage delivery timing text.",
@@ -55,10 +60,11 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     assert_includes reply, "Source:"
     assert_includes reply, "https://www.aipassportphoto.co/"
     assert_equal "policy", ticket.category
-    assert_equal [ "knowledge_answer" ], llm_client.calls.map { |call| call[:task] }
-    assert_includes llm_client.calls.first[:context][:knowledge_chunks].first[:content], "Under 60 seconds"
-    assert_includes llm_client.calls.first[:prompt], "do not include URLs or citation text directly in reply"
-    assert_includes llm_client.calls.first[:prompt], "set cited_source_url only when one provided source page directly supports the answer"
+    assert_equal [ "human_handoff_intent", "knowledge_answer" ], llm_client.calls.map { |call| call[:task] }
+    knowledge_call = llm_client.calls.find { |call| call[:task] == "knowledge_answer" }
+    assert_includes knowledge_call[:context][:knowledge_chunks].first[:content], "Under 60 seconds"
+    assert_includes knowledge_call[:prompt], "do not include URLs or citation text directly in reply"
+    assert_includes knowledge_call[:prompt], "set cited_source_url only when one provided source page directly supports the answer"
   end
 
   test "uses the llm to compose a yes-no faq answer from public knowledge" do
@@ -94,6 +100,11 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     ticket.messages.create!(role: "user", content: "Can I make Canada passport picture?")
 
     llm_client = FakeKnowledgeLlmClient.new(
+      {
+        needs_human_handoff: false,
+        confidence: 0.94,
+        reasoning_summary: "The customer is not explicitly asking for a human handoff."
+      },
       {
         reply: "Yes, you can. Canada passport photos are supported.",
         confidence: 0.94,
@@ -147,6 +158,11 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     ticket.messages.create!(role: "user", content: "How much will it cost?")
 
     llm_client = FakeKnowledgeLlmClient.new(
+      {
+        needs_human_handoff: false,
+        confidence: 0.94,
+        reasoning_summary: "The customer is not explicitly asking for a human handoff."
+      },
       {
         reply: "The provided public information does not include pricing details.",
         confidence: 0.52,
@@ -330,6 +346,47 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     refute_equal "public_knowledge", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
   end
 
+  test "does not answer from public knowledge on a vague follow-up with no clear support intent" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    source = Knowledge::Source.create!(
+      company: company,
+      url: "https://www.aipassportphoto.co/",
+      title: "Homepage",
+      source_kind: "website_page",
+      status: "imported",
+      extracted_text: "Most passport photo requests are completed in under 60 seconds."
+    )
+    source.chunks.create!(
+      company: company,
+      content: "Most passport photo requests are completed in under 60 seconds.",
+      position: 0,
+      token_estimate: 10
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "i dont get it")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    ticket.reload
+
+    assert_equal "escalated", ticket.status
+    assert_equal "human", ticket.current_layer
+    refute_equal "public_knowledge", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
+  end
+
   test "curated manual knowledge is preferred for important faq answers" do
     company = Company.create!(
       name: "AI Passport Photo",
@@ -371,6 +428,11 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
 
     llm_client = FakeKnowledgeLlmClient.new(
       {
+        needs_human_handoff: false,
+        confidence: 0.94,
+        reasoning_summary: "The customer is not explicitly asking for a human handoff."
+      },
+      {
         reply: "Yes, you can. Canada passport photos are supported.",
         confidence: 0.96,
         reasoning_summary: "Answered from the curated Canada passport photo guidance.",
@@ -380,7 +442,8 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
 
     SupportPipeline.new(ticket: ticket, llm_client: llm_client).call
 
-    knowledge_chunks = llm_client.calls.first[:context][:knowledge_chunks]
+    knowledge_call = llm_client.calls.find { |call| call[:task] == "knowledge_answer" }
+    knowledge_chunks = knowledge_call[:context][:knowledge_chunks]
 
     assert_equal manual_entry.title, knowledge_chunks.first[:manual_entry_title]
     assert_includes knowledge_chunks.first[:content], "50 x 70 mm"

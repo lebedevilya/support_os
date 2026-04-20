@@ -200,6 +200,63 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_includes html, %(action="#{widget_ticket_messages_path(ticket)}")
     assert_includes html, %(action="#{close_widget_ticket_path(ticket)}")
     assert_includes html, %(data-action="keydown-&gt;enter-submit#submitOnEnter")
+    assert_includes html, %(aria-label="Send message")
+    assert_includes html, "Close the ticket"
+  end
+
+  test "rendered chat keeps the transcript in a dedicated scroll region" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "anna@example.com")
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "awaiting_customer",
+      channel: "widget",
+      current_layer: "specialist",
+      processing: false
+    )
+    8.times do |index|
+      ticket.messages.create!(role: index.even? ? "user" : "assistant", content: "Message #{index}")
+    end
+
+    html = ApplicationController.render(
+      partial: "widget/tickets/chat",
+      locals: { ticket: ticket }
+    )
+
+    assert_includes html, %(class="flex h-full min-h-0 flex-col")
+    assert_includes html, %(class="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1")
+  end
+
+  test "rendered chat wires transcript auto-scroll behavior" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "anna@example.com")
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "awaiting_customer",
+      channel: "widget",
+      current_layer: "specialist",
+      processing: false
+    )
+    ticket.messages.create!(role: "user", content: "First")
+    ticket.messages.create!(role: "assistant", content: "Second")
+
+    html = ApplicationController.render(
+      partial: "widget/tickets/chat",
+      locals: { ticket: ticket }
+    )
+
+    assert_includes html, %(data-controller="auto-scroll")
+    assert_includes html, %(data-auto-scroll-target="viewport")
   end
 
   test "customer can close the ticket from the widget" do
@@ -261,7 +318,8 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_equal true, ticket.reload.processing
     assert_includes response.body, %(<turbo-stream action="replace" target="#{ActionView::RecordIdentifier.dom_id(ticket, :chat)}">)
     assert_includes response.body, "Can you check the status again?"
-    assert_includes response.body, "Loading..."
+    assert_includes response.body, "Assistant is typing"
+    assert_includes response.body, "Thinking"
   end
 
   test "inbox shows category and confidence for support tickets" do

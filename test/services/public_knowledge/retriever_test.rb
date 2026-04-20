@@ -92,4 +92,74 @@ class PublicKnowledge::RetrieverTest < ActiveSupport::TestCase
     assert_equal manual_entry, results.first.chunk.manual_entry
     assert_includes results.first.chunk.content, "50 x 70 mm"
   end
+
+  test "does not confuse leading can with canada when matching uk visa questions" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+
+    canada_entry = Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Canada passport photos",
+      content: "AI Passport Photo supports Canada passport photos and prepares them in the required 50 x 70 mm format.",
+      status: "active"
+    )
+
+    uk_entry = Knowledge::ManualEntry.create!(
+      company: company,
+      title: "UK visa photos",
+      content: "AI Passport Photo supports UK visa photo requirements and can prepare compliant UK visa photos.",
+      status: "active"
+    )
+
+    results = PublicKnowledge::Retriever.new(
+      company: company,
+      query: "Can I make a picture for UK visa?"
+    ).matches
+
+    assert_equal uk_entry, results.first.chunk.manual_entry
+    refute_equal canada_entry, results.first.chunk.manual_entry
+  end
+
+  test "does not let canada manual knowledge outrank a uk source because of the word can" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+
+    canada_entry = Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Canada passport photos",
+      content: "AI Passport Photo supports Canada passport photos and prepares them in the required 50 x 70 mm format.",
+      status: "active"
+    )
+
+    uk_source = Knowledge::Source.create!(
+      company: company,
+      url: "https://www.aipassportphoto.co/",
+      title: "Homepage",
+      source_kind: "website_page",
+      status: "imported",
+      extracted_text: "We support UK visa photo requirements and can prepare compliant UK visa photos."
+    )
+    uk_source.chunks.create!(
+      company: company,
+      content: "We support UK visa photo requirements and can prepare compliant UK visa photos.",
+      position: 0,
+      token_estimate: 14
+    )
+
+    results = PublicKnowledge::Retriever.new(
+      company: company,
+      query: "Can I make a picture for UK visa?"
+    ).matches
+
+    assert_equal uk_source.chunks.first, results.first.chunk
+    refute_equal canada_entry, results.first.chunk.manual_entry
+  end
 end

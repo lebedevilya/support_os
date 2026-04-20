@@ -169,11 +169,6 @@ end
 [
   {
     company: aipassportphoto,
-    title: "Canada passport photos",
-    content: "AI Passport Photo supports Canada passport photos. The service prepares photos in the required 50 x 70 mm format with a plain white background and checks the image against official passport photo requirements."
-  },
-  {
-    company: aipassportphoto,
     title: "Turnaround time",
     content: "Most passport photo requests are completed in under 60 seconds. In heavier traffic, delivery can take up to 2 minutes."
   },

@@ -214,6 +214,11 @@ class SupportPipelineTest < ActiveSupport::TestCase
 
     llm_client = FakeLlmClient.new(
       {
+        needs_human_handoff: false,
+        confidence: 0.94,
+        reasoning_summary: "The customer is not explicitly asking for a human handoff."
+      },
+      {
         category: "policy",
         priority: "normal",
         route: "specialist",
@@ -238,8 +243,8 @@ class SupportPipelineTest < ActiveSupport::TestCase
     ticket.reload
 
     assert_equal "awaiting_customer", ticket.status
-    assert_equal 2, llm_client.calls.size
-    assert_equal [ "triage", "specialist" ], llm_client.calls.map { |call| call[:task] }
+    assert_equal 3, llm_client.calls.size
+    assert_equal [ "human_handoff_intent", "triage", "specialist" ], llm_client.calls.map { |call| call[:task] }
     assert_includes ticket.messages.order(:created_at).last.content, "Canada"
     assert_equal [ "canada", "passport", "policy", "supported-country" ], ticket.reload.tag_list.sort
     triage_run = ticket.agent_runs.order(:created_at).first
@@ -259,6 +264,11 @@ class SupportPipelineTest < ActiveSupport::TestCase
 
     llm_client = FakeLlmClient.new(
       {
+        needs_human_handoff: false,
+        confidence: 0.94,
+        reasoning_summary: "The customer is not explicitly asking for a human handoff."
+      },
+      {
         category: "policy",
         priority: "normal",
         route: "specialist",
@@ -276,7 +286,7 @@ class SupportPipelineTest < ActiveSupport::TestCase
     assert_equal "human", ticket.current_layer
     assert_equal 2, ticket.agent_runs.count
     assert_equal [ "TriageAgent", "HumanHandoff" ], ticket.agent_runs.order(:created_at).pluck(:agent_name)
-    assert_equal 1, llm_client.calls.size
+    assert_equal 2, llm_client.calls.size
     assert_equal "human", ticket.messages.order(:created_at).last.role
     assert_includes ticket.escalation_reason, "confidence"
   end
@@ -298,6 +308,11 @@ class SupportPipelineTest < ActiveSupport::TestCase
     ticket.messages.create!(role: "user", content: "Do you support Canada passport photos?")
 
     llm_client = FakeLlmClient.new(
+      {
+        needs_human_handoff: false,
+        confidence: 0.94,
+        reasoning_summary: "The customer is not explicitly asking for a human handoff."
+      },
       {
         category: "policy",
         priority: "normal",
@@ -327,6 +342,49 @@ class SupportPipelineTest < ActiveSupport::TestCase
     assert_equal "human", ticket.messages.order(:created_at).last.role
     assert_includes ticket.escalation_reason, "confidence"
     assert_includes ticket.handoff_note, "human review"
+  end
+
+  test "llm triage escalates an explicit request for a human before public knowledge routing" do
+    source = Knowledge::Source.create!(
+      company: @company,
+      url: "https://www.aipassportphoto.co/contact",
+      title: "Contact",
+      source_kind: "website_page",
+      status: "imported",
+      extracted_text: "Customers can contact AI Passport Photo support through the website contact page or by emailing help@aipassportphoto.co."
+    )
+    source.chunks.create!(
+      company: @company,
+      content: "Customers can contact AI Passport Photo support through the website contact page or by emailing help@aipassportphoto.co.",
+      position: 0,
+      token_estimate: 16
+    )
+
+    ticket = @company.tickets.create!(
+      customer: @customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "please call someone from support")
+
+    llm_client = FakeLlmClient.new(
+      {
+        needs_human_handoff: true,
+        confidence: 0.97,
+        reasoning_summary: "The customer is explicitly asking for human support."
+      }
+    )
+
+    SupportPipeline.new(ticket: ticket, llm_client: llm_client).call
+
+    ticket.reload
+
+    assert_equal "escalated", ticket.status
+    assert_equal "human", ticket.current_layer
+    assert_equal [ "human_handoff_intent" ], llm_client.calls.map { |call| call[:task] }
+    assert_equal "human", ticket.messages.order(:created_at).last.role
+    refute_equal "public_knowledge", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
   end
 
   class FakeLlmClient

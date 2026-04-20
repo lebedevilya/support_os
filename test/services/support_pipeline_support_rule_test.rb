@@ -49,4 +49,5 @@ class SupportPipelineSupportRuleTest < ActiveSupport::TestCase
     assert_equal "support_rule", triage_snapshot.fetch("source")
     assert_equal "Embassy refund dispute", triage_snapshot.fetch("matched_rule_name")
   end
+
 end

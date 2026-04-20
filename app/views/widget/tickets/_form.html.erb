@@ -28,7 +28,7 @@
 
   <div>
     <%= form.label :content, "Message", class: "mb-2 block text-sm font-medium text-slate-800" %>
-    <%= form.text_area :content, name: "ticket[content]", rows: 5, class: "block w-full rounded-2xl border border-slate-300 px-4 py-3", data: { controller: "enter-submit", action: "keydown->enter-submit#submitOnEnter" } %>
+    <%= form.text_area :content, name: "ticket[content]", rows: 3, class: "block w-full rounded-2xl border border-slate-300 px-4 py-3", data: { controller: "enter-submit", action: "keydown->enter-submit#submitOnEnter" } %>
   </div>
 
   <%= form.submit "Send", class: "rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white" %>

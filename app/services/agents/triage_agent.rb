@@ -8,6 +8,9 @@ module Agents
     end
 
     def call
+      human_request_result = explicit_human_handoff_result
+      return human_request_result if human_request_result
+
       rule_result = matched_support_rule_result
       return rule_result if rule_result
 
@@ -34,6 +37,50 @@ module Agents
     end
 
     private
+
+    def explicit_human_handoff_result
+      return unless @llm_client
+
+      response = @llm_client.complete_json(
+        task: "human_handoff_intent",
+        prompt: <<~PROMPT,
+          Decide whether the customer is explicitly asking to stop automated support and be handed off to a human.
+          Return keys:
+          - needs_human_handoff: boolean
+          - confidence: decimal between 0 and 1
+          - reasoning_summary: short sentence
+          - tags: array of strings
+          Requirements:
+          - only return true when the customer is clearly asking for a human, support agent, real person, handoff, transfer, or escalation
+          - frustration alone is not enough unless it clearly asks for a human
+          - requests for contact details or business hours are not the same as asking for a human handoff in this chat
+        PROMPT
+        context: {
+          company: @ticket.company.name,
+          latest_message: latest_message.content,
+          message_history: @ticket.messages.order(:created_at).pluck(:role, :content)
+        }
+      )
+      return unless response[:needs_human_handoff] == true
+
+      {
+        source: "llm_human_handoff",
+        status: "escalated",
+        category: "other",
+        priority: "high",
+        route: "escalate",
+        current_layer: "human",
+        confidence: numeric_confidence(response[:confidence]),
+        decision: "escalate",
+        escalation_reason: "The customer explicitly requested human support.",
+        handoff_note: "Escalated to human support because the customer explicitly asked for a human agent in this chat.",
+        reasoning_summary: response[:reasoning_summary].presence || "Explicit human handoff request bypassed automated support.",
+        input_snapshot: latest_message.content,
+        tags: normalized_tags(response[:tags], fallback_tags: %w[human-review explicit-human-request escalate])
+      }
+    rescue StandardError
+      nil
+    end
 
     def matched_support_rule_result
       match = SupportRuleMatcher.new(company: @ticket.company, content: latest_message.content).call
