@@ -44,6 +44,7 @@ module ApplicationHelper
 
     case source
     when "support_rule" then "Support rule"
+    when "llm_human_handoff" then "Human handoff intent"
     when "public_knowledge" then "Public knowledge"
     when "public_knowledge_llm" then "Public knowledge + LLM"
     when "llm" then "LLM"
@@ -54,6 +55,46 @@ module ApplicationHelper
     end
   rescue JSON::ParserError, TypeError, NoMethodError
     "Unknown"
+  end
+
+  def trace_step_label(run)
+    case run.agent_name
+    when "TriageAgent" then "Triage step"
+    when "SpecialistAgent" then "Specialist step"
+    when "HumanHandoff" then "Human handoff"
+    else
+      run.agent_name
+    end
+  end
+
+  def tool_kind_label(tool_name)
+    action_tools = %w[resend_download_link reboot_node]
+    action_tools.include?(tool_name) ? "Action completed" : "Lookup tool"
+  end
+
+  def widget_scenarios_for(company)
+    return [] unless company
+
+    case company.slug
+    when "aipassportphoto"
+      [
+        { prompt: "Can I make a picture for UK visa?", email: "review@example.com" },
+        { prompt: "How long does it take?", email: "timing@example.com" },
+        { prompt: "What is the status of my photo request?", email: "anna@example.com" },
+        { prompt: "I did not receive my file, resend the download link", email: "sara@example.com" },
+        { prompt: "My photo was rejected by the embassy and I want a refund right now", email: "refund@example.com" }
+      ]
+    when "nodes-garden"
+      [
+        { prompt: "What states can a deployment go through?", email: "lifecycle@example.com" },
+        { prompt: "How does billing work?", email: "billing@example.com" },
+        { prompt: "My node is still provisioning after 20 minutes", email: "operator@example.com" },
+        { prompt: "Reboot my node", email: "operator@example.com" },
+        { prompt: "Connect me to a human in this chat", email: "human@example.com" }
+      ]
+    else
+      []
+    end
   end
 
   private

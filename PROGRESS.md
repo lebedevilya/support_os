@@ -95,43 +95,20 @@ Seed data already includes:
 - public knowledge source records imported from live sites
 - generated chunks from imported pages
 - mock business records
+- seeded lookup and action-tool specialist cases for both companies
 - seeded tickets for the main walkthroughs
 
 The seed flow now uses `PublicKnowledge::SiteImporter` instead of handwritten `Knowledge::Source` snippets.
 
-### Verified live knowledge import
+### Public knowledge import
 
-`db:seed` was run after the importer changes with live network access.
+`db:seed` attempts to import live public pages for both companies.
 
-Current imported public sources:
+Important caveat:
 
-- `aipassportphoto`
-  - `https://www.aipassportphoto.co/`
-  - `https://www.aipassportphoto.co/contact`
-  - `https://www.aipassportphoto.co/guarantee`
-  - `https://www.aipassportphoto.co/privacy`
-  - `https://www.aipassportphoto.co/terms`
-  - current chunk count observed after seed: `66`
-- `nodes-garden`
-  - `https://nodes.garden/`
-  - `https://nodes.garden/dashboard`
-  - `https://nodes.garden/pages/about`
-  - `https://nodes.garden/pages/commerce_stripe_disclosure`
-  - `https://nodes.garden/pages/crypto_node`
-  - `https://nodes.garden/pages/faq`
-  - `https://nodes.garden/pages/partners`
-  - `https://nodes.garden/pages/privacy_policy`
-  - `https://nodes.garden/pages/terms_of_service`
-  - current chunk count observed after seed: `97`
-
-Current curated manual knowledge after seed:
-
-- `aipassportphoto`
-  - manual entries: `5`
-  - manual chunks: `5`
-- `nodes-garden`
-  - manual entries: `5`
-  - manual chunks: `5`
+- import success depends on network access at seed time
+- when the network is blocked, the seed still completes, but imported public pages will be missing until `bin/rails db:seed` is re-run with network access
+- curated manual knowledge still seeds locally and continues to support the most important FAQ-style cases
 
 ### Verified status
 
@@ -163,16 +140,26 @@ The most recently verified flows:
 - internal UI now uses operator-facing status labels such as `Needs support`, `Waiting on support`, and `Waiting on customer`
 - curated manual knowledge now outranks noisy imported pages in retrieval without hardcoding company-specific phrases in code
 - manual entries now auto-index into chunks through a dedicated service so retrieval stays in sync with curated content
+- specialist can now complete explicit mock action tools in addition to lookup tools
+- AI Passport Photo now supports a demo `resend_download_link` action after request lookup
+- nodes.garden now supports a demo `reboot_node` action after deployment lookup
+- the dedicated trace page now renders as a timeline with inline lookup/action tool steps and collapsible raw payloads
+- company widgets now expose one-click seeded scenario prompts on a fresh conversation
+- scenario prompts now prefill the seeded email and message and submit immediately on a new chat
+- scenario prompts are intentionally hidden once a conversation is in progress
+- closing a conversation now offers an in-widget `Start a new conversation` path with the same company preselected
+- the company-scoped new-ticket frame now stays scrollable after closing and reopening a chat
+- escalated or human-owned widget conversations now show a customer-facing waiting state instead of exposing raw operator handoff wording
 
 Most recently re-run tests:
 
-- command: `bin/rails test test/services/support_pipeline_test.rb test/services/public_knowledge/retriever_test.rb test/services/public_knowledge/support_pipeline_public_answer_test.rb test/jobs/support_pipeline_job_test.rb test/integration/support_os_flow_test.rb test/services/support_pipeline_support_rule_test.rb test/services/support_rule_matcher_test.rb`
-- result: `38 runs, 338 assertions, 0 failures, 0 errors, 0 skips`
+- command: `bin/rails test test/integration/support_os_flow_test.rb`
+- result: `20 runs, 274 assertions, 0 failures, 0 errors, 0 skips`
 
-Last previously recorded broader suite result:
+Latest full-suite result:
 
-- command: `rbenv exec bundle exec bin/rails test`
-- result: `23 runs, 142 assertions, 0 failures, 0 errors, 0 skips`
+- command: `PARALLEL_WORKERS=1 bin/rails test`
+- result: `60 runs, 494 assertions, 0 failures, 0 errors, 0 skips`
 
 ## What Matches The Plan
 
@@ -207,45 +194,18 @@ These planned requirements are already satisfied or mostly satisfied:
 
 These are the main gaps between the current code and the intended demo quality.
 
-### 1. Delivery flow is still only partially honest
+### 1. Human support remains visually clear for customers, but operator workflow is still thin
 
 Current problem:
 
-- the fake “resent asset” claim is gone, which is good
-- but there is still no explicit resend tool path if we want to demonstrate that action honestly
-- tool output is still not exposed clearly enough in the reviewer-facing UI
+- the customer-facing waiting state is now much clearer inside the widget
+- but the internal human-support side is still thin after takeover: there is still no explicit assignee model, inbox split, or stronger human work queue behavior
 
 Why it matters:
 
-- the credibility problem is smaller now, but the operational story is still incomplete
+- the ownership model is correct, but the operator UX still stops short of a believable support console
 
-### 2. Trace linkage and reviewer-facing UI are still underpowered
-
-Current problem:
-
-- specialist `ToolCall` records are now linked to the persisted `SpecialistAgent` run, which fixes the main credibility gap
-- but trace payload visibility is still pretty raw, and the presentation could still do a better job distinguishing automation phases and outcomes
-- triage and handoff traces are clearer than before, but the trace page still reads like a debug screen more than an operator timeline
-
-Why it matters:
-
-- the backend is now more internally consistent, but the UI still undersells that consistency
-- the reviewer may still miss the strongest part of the implementation if the trace presentation stays too low-level
-
-### 3. Human support UX is only partially done
-
-Current problem:
-
-- manual takeover is now enforced correctly and is visible in the UI
-- status semantics are now much clearer than before
-- but the operator workflow is still thin after takeover: there is still no explicit assignee model, inbox split, or stronger human work queue behavior
-
-Why it matters:
-
-- the ownership model is now correct, but the operator UX is still weak
-- this is where the product either becomes a believable support console or stays a demo
-
-### 4. Knowledge quality is still only partially curated
+### 2. Knowledge quality is still only partially curated
 
 Current problem:
 
@@ -258,7 +218,7 @@ Why it matters:
 - the system will only feel trustworthy if the knowledge it uses is obviously clean and intentional
 - right now the curated layer exists, but the imported layer still needs cleanup to avoid dragging answer quality down
 
-### 5. Automatic tagging is still basic
+### 3. Automatic tagging is still basic
 
 Current problem:
 
@@ -271,7 +231,7 @@ Why it matters:
 - tags are only useful if they stay clean
 - without curation, the tag layer can drift into noisy metadata instead of becoming a durable operational tool
 
-### 6. Triage still has one coarse fallback path
+### 4. Triage still has one coarse fallback path
 
 Current problem:
 
@@ -287,24 +247,7 @@ Why it matters:
 
 Do these in this order.
 
-### Step 1. Finish the human support console
-
-Goal:
-
-- make the manually owned ticket flow feel like an actual support tool
-
-Changes:
-
-- add stronger queue behavior for human-owned tickets
-- consider an explicit "assigned/unassigned" or "owned by support" distinction if that helps the demo
-- keep improving trace/ticket labeling so the operator can instantly tell what automation already did and what is now manual
-- make manual takeover obvious across every remaining internal surface, not just the main ticket/detail views
-
-Expected outcome:
-
-- the reviewer sees a believable human-support workflow after escalation instead of just a reply box
-
-### Step 2. Tighten knowledge quality
+### Step 1. Tighten knowledge quality
 
 Goal:
 
@@ -317,7 +260,11 @@ Changes:
 - clean up weak source titles and noisy pages where possible
 - make sure the most important public questions map cleanly to curated manual entries or strong source pages
 
-### Step 3. Improve tag operations
+Expected outcome:
+
+- triage knowledge answers feel more intentional and less noisy
+
+### Step 2. Improve tag operations
 
 Goal:
 
@@ -333,39 +280,33 @@ Expected outcome:
 
 - the reviewer sees a support OS, not just a chat demo
 
-### Step 4. Fix trace linkage and add an honest mock resend path if needed
+### Step 3. Finish the human support console
 
 Goal:
 
-- support an actually honest operational story only where the demo truly needs it
+- make the manually owned ticket flow feel more like an actual support tool internally
 
 Changes:
 
-- keep improving the trace presentation now that specialist tool/run linkage is fixed
-- add an explicit `resend_asset` mock tool if the demo truly needs resend claims
-- persist that tool call and attach it to the relevant `AgentRun`
-- expose that tool call clearly in the ticket and trace UI
+- add stronger queue behavior for human-owned tickets
+- consider an explicit "assigned/unassigned" or "owned by support" distinction if that helps the demo
+- keep improving trace/ticket labeling so the operator can instantly tell what automation already did and what is now manual
 
 Expected outcome:
 
-- resend behavior becomes demonstrably honest instead of implied
+- the reviewer sees a believable human-support workflow after escalation instead of just a reply box
 
-### Step 5. Add guided demo prompts and curate admin
-
-Goal:
-
-- make the walkthrough reliable and the back office understandable
+### Step 4. Add guided showcase polish where it helps the walkthrough
 
 Changes:
 
-- add prompt buttons or cards to the widget
-- prefill message input from selected prompts
-- optionally show suggested demo emails for seeded records
+- keep the showcase docs and seeded scenarios aligned
+- consider adding a lightweight scenario picker or index page outside the widget if the reviewer needs a more guided start
 - curate MotorAdmin around `Knowledge::` models and `SupportRule`
 
 Expected outcome:
 
-- the happy-path walkthrough becomes obvious and repeatable
+- the walkthrough stays reliable without hiding the freeform product shape
 
 ### Step 4. Tighten knowledge-answer boundaries
 

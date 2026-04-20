@@ -1,5 +1,7 @@
 module Agents
   class SpecialistAgent
+    ACTION_NONE = "none".freeze
+
     def initialize(ticket:, triage_result:, llm_client: nil)
       @ticket = ticket
       @triage_result = triage_result
@@ -44,23 +46,43 @@ module Agents
       record = @ticket.company.business_records.find_by(customer_email: @ticket.customer.email)
 
       if record
-        tool_result = create_tool_call!(
+        lookup_result = create_tool_call!(
           tool_name: "lookup_photo_request",
-          output_payload: { external_id: record.external_id, status: record.status }
+          input_payload: { email: @ticket.customer.email },
+          output_payload: {
+            external_id: record.external_id,
+            status: record.status,
+            payload: record.payload
+          }
         )
 
-        return llm_delivery_response(record, tool_result) if @llm_client
+        action = select_action(
+          category: "delivery",
+          allowed_actions: [ ACTION_NONE, "resend_download_link", "escalate" ],
+          record: record,
+          tool_results: [ tool_payload(lookup_result) ]
+        )
+        return action_escalation_result("Delivery request needs human review after record lookup.") if action == "escalate"
+
+        tool_results = [ tool_payload(lookup_result) ]
+        if action == "resend_download_link"
+          return action_escalation_result("Download link resend is not allowed for this request.") unless resend_allowed?(record)
+
+          tool_results << tool_payload(resend_download_link!(record))
+        end
+
+        return llm_delivery_response(record, tool_results) if @llm_client
 
         {
           source: "fallback",
           status: "awaiting_customer",
           current_layer: "specialist",
-          confidence: 0.87,
+          confidence: action == "resend_download_link" ? 0.93 : 0.87,
           decision: "answered",
-          reply: delivery_status_reply(record),
-          reasoning_summary: "A matching business record was found for the customer email.",
+          reply: delivery_status_reply(record, action: action),
+          reasoning_summary: delivery_reasoning_summary(action),
           input_snapshot: latest_message.content,
-          tags: %w[delivery asset-delivery]
+          tags: delivery_tags(action)
         }
       else
         {
@@ -83,23 +105,39 @@ module Agents
       record = @ticket.company.business_records.find_by(customer_email: @ticket.customer.email)
 
       if record
-        tool_result = create_tool_call!(
+        lookup_result = create_tool_call!(
           tool_name: "lookup_deployment",
+          input_payload: { email: @ticket.customer.email },
           output_payload: { external_id: record.external_id, status: record.status, payload: record.payload }
         )
 
-        return llm_technical_response(record, tool_result) if @llm_client
+        action = select_action(
+          category: "technical",
+          allowed_actions: [ ACTION_NONE, "reboot_node", "escalate" ],
+          record: record,
+          tool_results: [ tool_payload(lookup_result) ]
+        )
+        return action_escalation_result("Technical request needs human review after deployment lookup.") if action == "escalate"
+
+        tool_results = [ tool_payload(lookup_result) ]
+        if action == "reboot_node"
+          return action_escalation_result("Node reboot is not allowed for this deployment.") unless reboot_allowed?(record)
+
+          tool_results << tool_payload(reboot_node!(record))
+        end
+
+        return llm_technical_response(record, tool_results) if @llm_client
 
         {
           source: "fallback",
           status: "awaiting_customer",
           current_layer: "specialist",
-          confidence: 0.85,
+          confidence: action == "reboot_node" ? 0.92 : 0.85,
           decision: "answered",
-          reply: "Your node deployment is still provisioning. The latest record shows the deployment is active but not healthy yet.",
-          reasoning_summary: "A deployment record was found and the current status is still provisioning.",
+          reply: technical_status_reply(record, action: action),
+          reasoning_summary: technical_reasoning_summary(action),
           input_snapshot: latest_message.content,
-          tags: %w[technical provisioning node]
+          tags: technical_tags(action)
         }
       else
         {
@@ -138,11 +176,11 @@ module Agents
       @ticket.messages.order(:created_at).last
     end
 
-    def create_tool_call!(tool_name:, output_payload:)
+    def create_tool_call!(tool_name:, input_payload:, output_payload:)
       @ticket.tool_calls.create!(
         tool_name: tool_name,
         status: "success",
-        input_payload: { email: @ticket.customer.email }.to_json,
+        input_payload: input_payload.to_json,
         output_payload: output_payload.to_json
       )
     end
@@ -176,7 +214,7 @@ module Agents
       llm_failure_result("Policy specialist failed: #{e.message}")
     end
 
-    def llm_delivery_response(record, tool_result)
+    def llm_delivery_response(record, tool_results)
       response = @llm_client.complete_json(
         task: "specialist",
         prompt: specialist_prompt,
@@ -185,13 +223,7 @@ module Agents
           category: @triage_result[:category],
           latest_message: latest_message.content,
           knowledge_articles: related_articles,
-          tool_results: [
-            {
-              tool_name: tool_result.tool_name,
-              status: tool_result.status,
-              output: JSON.parse(tool_result.output_payload)
-            }
-          ],
+          tool_results: tool_results,
           business_record: {
             external_id: record.external_id,
             status: record.status,
@@ -205,7 +237,7 @@ module Agents
       llm_failure_result("Delivery specialist failed: #{e.message}")
     end
 
-    def llm_technical_response(record, tool_result)
+    def llm_technical_response(record, tool_results)
       response = @llm_client.complete_json(
         task: "specialist",
         prompt: specialist_prompt,
@@ -214,13 +246,7 @@ module Agents
           category: @triage_result[:category],
           latest_message: latest_message.content,
           knowledge_articles: related_articles,
-          tool_results: [
-            {
-              tool_name: tool_result.tool_name,
-              status: tool_result.status,
-              output: JSON.parse(tool_result.output_payload)
-            }
-          ],
+          tool_results: tool_results,
           business_record: {
             external_id: record.external_id,
             status: record.status,
@@ -247,13 +273,165 @@ module Agents
         - tags: array of strings
         Use only the provided knowledge and tool results.
         Do not claim any operational action happened unless the tool results explicitly show that action happened.
+        If an action tool ran successfully, say what happened and what the customer should expect next.
         If the case is ambiguous or unsafe, set resolve_ticket to false.
       PROMPT
     end
 
-    def delivery_status_reply(record)
+    def delivery_status_reply(record, action:)
       delivery_state = record.payload["asset_delivery"].presence || record.status
+      return "I found your request and resent the download link. You can use #{record.payload['download_url']} to access the file." if action == "resend_download_link"
+
       "I found your request. The delivery status is currently marked as #{delivery_state}. I have not triggered a resend from this chat."
+    end
+
+    def technical_status_reply(record, action:)
+      return "I found your deployment and started a node reboot for #{record.payload['node_name']}. The deployment is now marked as rebooting." if action == "reboot_node"
+
+      "Your node deployment is still provisioning. The latest record shows the deployment is active but not healthy yet."
+    end
+
+    def delivery_reasoning_summary(action)
+      return "A matching business record was found and the download link resend action completed." if action == "resend_download_link"
+
+      "A matching business record was found for the customer email."
+    end
+
+    def technical_reasoning_summary(action)
+      return "A deployment record was found and the node reboot action completed." if action == "reboot_node"
+
+      "A deployment record was found and the current status is still provisioning."
+    end
+
+    def delivery_tags(action)
+      tags = %w[delivery asset-delivery]
+      tags << "download-link-resent" if action == "resend_download_link"
+      tags
+    end
+
+    def technical_tags(action)
+      tags = %w[technical provisioning node]
+      tags << "node-reboot" if action == "reboot_node"
+      tags
+    end
+
+    def resend_download_link!(record)
+      payload = record.payload.deep_dup
+      payload["asset_delivery"] = "resent"
+      payload["last_resent_at"] = Time.current.iso8601
+      record.update!(payload: payload)
+
+      create_tool_call!(
+        tool_name: "resend_download_link",
+        input_payload: { external_id: record.external_id },
+        output_payload: {
+          external_id: record.external_id,
+          download_url: payload["download_url"],
+          completed: true
+        }
+      )
+    end
+
+    def reboot_node!(record)
+      payload = record.payload.deep_dup
+      payload["last_reboot_at"] = Time.current.iso8601
+      record.update!(status: "rebooting", payload: payload)
+
+      create_tool_call!(
+        tool_name: "reboot_node",
+        input_payload: { external_id: record.external_id, node_name: payload["node_name"] },
+        output_payload: {
+          external_id: record.external_id,
+          node_name: payload["node_name"],
+          status: "rebooting",
+          completed: true
+        }
+      )
+    end
+
+    def select_action(category:, allowed_actions:, record:, tool_results:)
+      return llm_action_choice(category: category, allowed_actions: allowed_actions, record: record, tool_results: tool_results) if @llm_client
+
+      fallback_action_choice(category: category, allowed_actions: allowed_actions)
+    end
+
+    def llm_action_choice(category:, allowed_actions:, record:, tool_results:)
+      response = @llm_client.complete_json(
+        task: "specialist_action",
+        prompt: <<~PROMPT,
+          Choose the next specialist action.
+          Return keys:
+          - action: one of #{allowed_actions.join(', ')}
+          - reasoning_summary: short sentence
+          Rules:
+          - only choose a listed action
+          - choose an action only when the customer clearly asked for it and the provided record state supports it
+          - choose escalate when the request is unsafe or the record state is ambiguous
+          - choose none when a lookup-backed reply is enough
+        PROMPT
+        context: {
+          company: @ticket.company.name,
+          category: category,
+          latest_message: latest_message.content,
+          business_record: {
+            external_id: record.external_id,
+            status: record.status,
+            payload: record.payload
+          },
+          tool_results: tool_results
+        }
+      )
+
+      choice = response[:action].to_s
+      allowed_actions.include?(choice) ? choice : ACTION_NONE
+    rescue StandardError
+      fallback_action_choice(category: category, allowed_actions: allowed_actions)
+    end
+
+    def fallback_action_choice(category:, allowed_actions:)
+      message = latest_message.content.to_s.downcase
+
+      if category == "delivery" && allowed_actions.include?("resend_download_link") && message.include?("resend")
+        return "resend_download_link"
+      end
+
+      if category == "technical" && allowed_actions.include?("reboot_node") && message.include?("reboot")
+        return "reboot_node"
+      end
+
+      ACTION_NONE
+    end
+
+    def resend_allowed?(record)
+      record.payload["resend_allowed"] == true && record.payload["download_url"].present?
+    end
+
+    def reboot_allowed?(record)
+      record.payload["reboot_allowed"] == true
+    end
+
+    def action_escalation_result(reason)
+      {
+        source: "fallback",
+        status: "escalated",
+        current_layer: "human",
+        confidence: 0.64,
+        decision: "escalate",
+        escalation_reason: reason,
+        handoff_note: "Escalated for human review because the specialist action could not be completed safely.",
+        reply: "I could not safely complete that request, so I have escalated it to a human reviewer.",
+        reasoning_summary: reason,
+        input_snapshot: latest_message.content,
+        tags: normalized_tags(nil, fallback_tags: specialist_tags(false))
+      }
+    end
+
+    def tool_payload(tool_result)
+      {
+        tool_name: tool_result.tool_name,
+        status: tool_result.status,
+        output: JSON.parse(tool_result.output_payload)
+      }
     end
 
     def llm_specialist_result(response)

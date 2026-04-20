@@ -44,19 +44,6 @@ nodes_garden = Company.create!(
   },
   {
     company: aipassportphoto,
-    name: "Supported country policy questions",
-    active: true,
-    priority: 20,
-    match_type: "all_terms",
-    terms: "support\ncanada",
-    route: "specialist",
-    category: "policy",
-    priority_level: "normal",
-    confidence: 0.88,
-    reasoning_summary: "Supported-country policy questions can go to the policy specialist."
-  },
-  {
-    company: aipassportphoto,
     name: "Missing asset delivery questions",
     active: true,
     priority: 20,
@@ -67,6 +54,19 @@ nodes_garden = Company.create!(
     priority_level: "normal",
     confidence: 0.82,
     reasoning_summary: "Missing asset questions can go to the delivery specialist."
+  },
+  {
+    company: aipassportphoto,
+    name: "Download link resend requests",
+    active: true,
+    priority: 18,
+    match_type: "all_terms",
+    terms: "resend\ndownload link",
+    route: "specialist",
+    category: "delivery",
+    priority_level: "high",
+    confidence: 0.9,
+    reasoning_summary: "Download-link resend requests should go to the delivery specialist."
   },
   {
     company: nodes_garden,
@@ -80,6 +80,19 @@ nodes_garden = Company.create!(
     priority_level: "normal",
     confidence: 0.84,
     reasoning_summary: "Provisioning and node-status questions can go to the technical specialist."
+  },
+  {
+    company: nodes_garden,
+    name: "Node reboot requests",
+    active: true,
+    priority: 18,
+    match_type: "all_terms",
+    terms: "reboot\nnode",
+    route: "specialist",
+    category: "technical",
+    priority_level: "high",
+    confidence: 0.9,
+    reasoning_summary: "Explicit reboot requests should go to the technical specialist."
   },
   {
     company: aipassportphoto,
@@ -255,7 +268,8 @@ end
     status: "completed",
     payload: {
       asset_delivery: "sent",
-      download_url: "https://example.test/download/APP-1001"
+      download_url: "https://example.test/download/APP-1001",
+      resend_allowed: true
     }
   },
   {
@@ -265,7 +279,20 @@ end
     customer_email: "mark@example.com",
     status: "processing",
     payload: {
-      asset_delivery: "pending"
+      asset_delivery: "pending",
+      resend_allowed: false
+    }
+  },
+  {
+    company: aipassportphoto,
+    record_type: "photo_request",
+    external_id: "APP-1003",
+    customer_email: "sara@example.com",
+    status: "completed",
+    payload: {
+      asset_delivery: "sent",
+      download_url: "https://example.test/download/APP-1003",
+      resend_allowed: true
     }
   },
   {
@@ -276,7 +303,8 @@ end
     status: "provisioning",
     payload: {
       node_name: "validator-1",
-      last_error: nil
+      last_error: nil,
+      reboot_allowed: true
     }
   },
   {
@@ -287,7 +315,8 @@ end
     status: "healthy",
     payload: {
       node_name: "archive-1",
-      last_error: nil
+      last_error: nil,
+      reboot_allowed: false
     }
   }
 ].each do |attributes|
@@ -316,7 +345,7 @@ seed_ticket!(
 seed_ticket!(
   company: aipassportphoto,
   email: "review@example.com",
-  content: "Do you support Canada passport photos?"
+  content: "Can I make a picture for UK visa?"
 )
 
 seed_ticket!(
@@ -335,4 +364,28 @@ seed_ticket!(
   company: nodes_garden,
   email: "operator@example.com",
   content: "My node is still provisioning after 20 minutes"
+)
+
+seed_ticket!(
+  company: aipassportphoto,
+  email: "sara@example.com",
+  content: "I did not receive my file, resend the download link"
+)
+
+seed_ticket!(
+  company: nodes_garden,
+  email: "operator@example.com",
+  content: "Reboot my node"
+)
+
+seed_ticket!(
+  company: nodes_garden,
+  email: "billing@example.com",
+  content: "How does billing work?"
+)
+
+seed_ticket!(
+  company: nodes_garden,
+  email: "human@example.com",
+  content: "Connect me to a human in this chat"
 )

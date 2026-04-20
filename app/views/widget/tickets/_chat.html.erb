@@ -2,6 +2,16 @@
 
 <div id="<%= dom_id(ticket, :chat) %>" class="flex h-full min-h-0 flex-col" data-controller="auto-scroll">
   <div class="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1" data-auto-scroll-target="viewport">
+    <% if ticket.current_layer == "human" && ticket.status.in?(%w[escalated in_progress]) %>
+      <div class="rounded-3xl border border-amber-200 bg-amber-50 px-4 py-4 text-amber-950 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">Waiting On Human Specialist</p>
+        <p class="mt-2 text-sm font-semibold">A human specialist is now reviewing your ticket.</p>
+        <p class="mt-2 text-sm leading-6 text-amber-900">
+          Please wait for a response. You can leave this page safely and we will also send the reply to your email.
+        </p>
+      </div>
+    <% end %>
+
     <% ticket.messages.order(:created_at).each do |message| %>
       <%= render "widget/tickets/message", message: message %>
     <% end %>
@@ -20,17 +30,23 @@
   </div>
 
   <% if ticket.status == "resolved" %>
-    <div class="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-      This conversation is closed.
+    <div class="mt-6 space-y-3">
+      <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        This conversation is closed.
+      </div>
+      <%= link_to "Start a new conversation",
+          new_widget_ticket_path(company_id: ticket.company_id),
+          class: "inline-flex cursor-pointer rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:border-slate-900 hover:bg-slate-900 hover:text-white",
+          data: { turbo_frame: "support_widget" } %>
     </div>
   <% elsif ticket.processing? %>
     <div class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
       Your message was submitted. The assistant reply will appear here automatically.
     </div>
   <% else %>
-    <%= form_with url: widget_ticket_messages_path(ticket), scope: :message, class: "mt-4 space-y-3" do |form| %>
+    <%= form_with url: widget_ticket_messages_path(ticket), scope: :message, class: "mt-4 space-y-3", data: { controller: "scenario-play", scenario_play_target: "form" } do |form| %>
       <div class="flex items-end gap-3">
-        <%= form.text_area :content, rows: 1, class: "block min-h-[3.5rem] flex-1 resize-none rounded-2xl border border-slate-300 px-4 py-3", data: { controller: "enter-submit", action: "keydown->enter-submit#submitOnEnter" } %>
+        <%= form.text_area :content, rows: 1, class: "block min-h-[3.5rem] flex-1 resize-none rounded-2xl border border-slate-300 px-4 py-3", data: { controller: "enter-submit", action: "keydown->enter-submit#submitOnEnter", scenario_play_target: "textarea" } %>
         <%= form.button type: :submit, class: "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white transition hover:bg-slate-800", aria: { label: "Send message" } do %>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-5 w-5 fill-current" aria-hidden="true">
             <path d="M21.8 2.2a1 1 0 0 0-1.05-.24l-17 6a1 1 0 0 0 .04 1.9l7.05 2.21 2.21 7.05a1 1 0 0 0 .9.7h.06a1 1 0 0 0 .92-.59l6-17a1 1 0 0 0-.13-1.03ZM13.9 16.7l-1.53-4.87a1 1 0 0 0-.63-.63L6.87 9.67l11.85-4.18Z"/>
@@ -41,7 +57,7 @@
 
     <div class="mt-4 flex justify-start">
       <%= form_with url: close_widget_ticket_path(ticket), method: :patch, class: "inline" do %>
-        <%= submit_tag "Close the ticket", class: "rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900" %>
+        <%= submit_tag "Close the ticket", class: "cursor-pointer rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:border-slate-900 hover:bg-slate-900 hover:text-white" %>
       <% end %>
     </div>
   <% end %>

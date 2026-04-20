@@ -54,6 +54,42 @@ class SupportPipelineTest < ActiveSupport::TestCase
     assert_includes ticket.messages.order(:created_at).last.content, "Canada"
   end
 
+  test "answers UK visa support question from triage public knowledge instead of specialist" do
+    source = Knowledge::Source.create!(
+      company: @company,
+      url: "https://www.aipassportphoto.co/",
+      title: "AI Passport Photo",
+      source_kind: "website_page",
+      status: "imported",
+      extracted_text: "Our AI removes the background, adjusts lighting, and checks every requirement for US, UK, Canada, and 100+ countries. Delivered instantly."
+    )
+    source.chunks.create!(
+      company: @company,
+      content: "Our AI removes the background, adjusts lighting, and checks every requirement for US, UK, Canada, and 100+ countries. Delivered instantly.",
+      position: 0,
+      token_estimate: 24
+    )
+
+    ticket = @company.tickets.create!(
+      customer: @customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Can I make a picture for UK visa?")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    ticket.reload
+
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "triage", ticket.current_layer
+    assert_equal 1, ticket.agent_runs.count
+    assert_equal [ "TriageAgent" ], ticket.agent_runs.order(:created_at).pluck(:agent_name)
+    assert_equal "assistant", ticket.messages.order(:created_at).last.role
+    assert_includes ticket.messages.order(:created_at).last.content, "UK"
+  end
+
   test "escalates an embassy refund dispute to human" do
     SupportRule.create!(
       name: "Embassy refund dispute",
@@ -194,6 +230,118 @@ class SupportPipelineTest < ActiveSupport::TestCase
     assert_equal ticket.agent_runs.order(:created_at).last, ticket.tool_calls.order(:created_at).last.agent_run
     refute_includes reply.downcase, "resent"
     assert_includes reply.downcase, "delivery status"
+  end
+
+  test "specialist can resend a download link through explicit tool calls" do
+    SupportRule.create!(
+      company: @company,
+      name: "Resend download link requests",
+      active: true,
+      priority: 15,
+      match_type: "all_terms",
+      terms: "resend\ndownload link",
+      route: "specialist",
+      category: "delivery",
+      priority_level: "high",
+      confidence: 0.9,
+      reasoning_summary: "Download-link resend requests should go to the delivery specialist."
+    )
+
+    BusinessRecord.create!(
+      company: @company,
+      record_type: "photo_request",
+      external_id: "APP-1001",
+      customer_email: "anna@example.com",
+      status: "completed",
+      payload: {
+        asset_delivery: "sent",
+        download_url: "https://example.test/download/APP-1001",
+        resend_allowed: true
+      }
+    )
+
+    ticket = @company.tickets.create!(
+      customer: @customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "I did not receive my file, resend the download link")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    ticket.reload
+
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "specialist", ticket.current_layer
+    assert_equal [ "lookup_photo_request", "resend_download_link" ], ticket.tool_calls.order(:created_at).pluck(:tool_name)
+    assert_equal [ "TriageAgent", "SpecialistAgent" ], ticket.agent_runs.order(:created_at).pluck(:agent_name)
+    assert_equal ticket.agent_runs.order(:created_at).last, ticket.tool_calls.order(:created_at).last.agent_run
+    assert_includes ticket.messages.order(:created_at).last.content.downcase, "resent"
+    assert_includes ticket.messages.order(:created_at).last.content, "https://example.test/download/APP-1001"
+
+    payload = @company.business_records.find_by!(external_id: "APP-1001").payload
+    assert_equal "resent", payload["asset_delivery"]
+    assert payload["last_resent_at"].present?
+  end
+
+  test "specialist can reboot a node through explicit tool calls" do
+    company = Company.create!(
+      name: "nodes.garden",
+      slug: "nodes-garden",
+      description: "Node deployment support",
+      support_email: "support@nodes.garden"
+    )
+    customer = Customer.create!(email: "operator@example.com")
+
+    SupportRule.create!(
+      company: company,
+      name: "Node reboot requests",
+      active: true,
+      priority: 15,
+      match_type: "all_terms",
+      terms: "reboot\nnode",
+      route: "specialist",
+      category: "technical",
+      priority_level: "high",
+      confidence: 0.9,
+      reasoning_summary: "Explicit reboot requests should go to the technical specialist."
+    )
+
+    BusinessRecord.create!(
+      company: company,
+      record_type: "node_deployment",
+      external_id: "ND-1001",
+      customer_email: "operator@example.com",
+      status: "provisioning",
+      payload: {
+        node_name: "validator-1",
+        last_error: nil,
+        reboot_allowed: true
+      }
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Reboot my node")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    ticket.reload
+
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "specialist", ticket.current_layer
+    assert_equal [ "lookup_deployment", "reboot_node" ], ticket.tool_calls.order(:created_at).pluck(:tool_name)
+    assert_equal ticket.agent_runs.order(:created_at).last, ticket.tool_calls.order(:created_at).last.agent_run
+    assert_includes ticket.messages.order(:created_at).last.content.downcase, "reboot"
+
+    record = company.business_records.find_by!(external_id: "ND-1001")
+    assert_equal "rebooting", record.status
+    assert record.payload["last_reboot_at"].present?
   end
 
   test "uses an injected llm client for triage and specialist decisions" do

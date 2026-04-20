@@ -3,6 +3,8 @@ module Widget
     def new
       @ticket = Ticket.new
       @companies = Company.order(:name)
+      @company = Company.find_by(id: params[:company_id])
+      @ticket.company = @company if @company
     end
 
     def create

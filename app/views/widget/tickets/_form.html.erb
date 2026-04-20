@@ -1,5 +1,6 @@
-<%= form_with model: [ :widget, ticket ], class: "mt-8 space-y-5" do |form| %>
+<%= form_with model: [ :widget, ticket ], class: "mt-8 space-y-5", data: { controller: "scenario-play", scenario_play_target: "form" } do |form| %>
   <% customer = local_assigns[:customer] %>
+  <% company = local_assigns[:company] %>
 
   <% if customer&.errors&.any? %>
     <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
@@ -23,13 +24,15 @@
 
   <div>
     <%= form.label :email, "Email", class: "mb-2 block text-sm font-medium text-slate-800" %>
-    <%= form.email_field :email, name: "ticket[email]", value: customer&.email, required: true, class: "block w-full rounded-2xl border border-slate-300 px-4 py-3" %>
+    <%= form.email_field :email, name: "ticket[email]", value: customer&.email, required: true, class: "block w-full rounded-2xl border border-slate-300 px-4 py-3", data: { scenario_play_target: "email" } %>
   </div>
 
   <div>
     <%= form.label :content, "Message", class: "mb-2 block text-sm font-medium text-slate-800" %>
-    <%= form.text_area :content, name: "ticket[content]", rows: 3, class: "block w-full rounded-2xl border border-slate-300 px-4 py-3", data: { controller: "enter-submit", action: "keydown->enter-submit#submitOnEnter" } %>
+    <%= form.text_area :content, name: "ticket[content]", rows: 3, class: "block w-full rounded-2xl border border-slate-300 px-4 py-3", data: { controller: "enter-submit", action: "keydown->enter-submit#submitOnEnter", scenario_play_target: "textarea" } %>
   </div>
 
-  <%= form.submit "Send", class: "rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white" %>
+  <%= form.submit "Send", class: "cursor-pointer rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800" %>
+
+  <%= render "widget/tickets/scenario_prompts", company: company %>
 <% end %>

@@ -21,68 +21,86 @@
   <% end %>
 
   <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-    <h2 class="text-lg font-semibold text-slate-900">Agent Runs</h2>
-    <% if @ticket.agent_runs.any? %>
-      <div class="mt-4 space-y-3">
+    <div class="flex items-center justify-between gap-4">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Trace Timeline</p>
+        <h2 class="mt-2 text-lg font-semibold text-slate-900">Customer message, automation steps, and tool actions</h2>
+      </div>
+      <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"><%= @ticket.agent_runs.count %> runs</span>
+    </div>
+
+    <div class="mt-6 space-y-4">
+      <div class="rounded-2xl border border-slate-200 px-4 py-4">
+        <div class="flex items-center justify-between gap-4">
+          <p class="font-semibold text-slate-900">Customer message</p>
+          <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"><%= @ticket.customer.email %></span>
+        </div>
+        <p class="mt-2 text-sm text-slate-700"><%= @ticket.messages.order(:created_at).find_by(role: "user")&.content.presence || "No customer message recorded." %></p>
+      </div>
+
+      <% if @ticket.agent_runs.any? %>
         <% @ticket.agent_runs.order(:created_at).each do |run| %>
           <% snapshot = JSON.parse(run.output_snapshot || "{}") rescue {} %>
-          <div class="rounded-2xl border border-slate-200 px-4 py-3">
+          <% run_tools = @ticket.tool_calls.select { |call| call.agent_run_id == run.id } %>
+          <div class="rounded-2xl border border-slate-200 px-4 py-4">
             <div class="flex items-center justify-between gap-4">
-              <p class="font-semibold text-slate-900"><%= run.agent_name %></p>
-              <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-                <%= agent_source_label(snapshot) %>
-              </span>
+              <div>
+                <p class="font-semibold text-slate-900"><%= trace_step_label(run) %></p>
+                <p class="mt-1 text-sm text-slate-600"><%= run.reasoning_summary.presence || "No summary recorded." %></p>
+              </div>
+              <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"><%= agent_source_label(snapshot) %></span>
             </div>
-            <p class="mt-1 text-sm text-slate-600"><%= run.reasoning_summary.presence || "No summary recorded." %></p>
+
             <div class="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
               <span class="rounded-full bg-slate-50 px-3 py-1">status: <%= run.status %></span>
               <span class="rounded-full bg-slate-50 px-3 py-1">decision: <%= run.decision.presence || "n/a" %></span>
               <span class="rounded-full bg-slate-50 px-3 py-1">confidence: <%= format_confidence(run.confidence) %></span>
             </div>
-            <div class="mt-3 grid gap-3 md:grid-cols-2">
-              <div class="rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">
-                <p class="font-semibold uppercase tracking-[0.2em] text-slate-400">Input snapshot</p>
-                <pre class="mt-3 overflow-x-auto whitespace-pre-wrap"><%= run.input_snapshot.presence || "No input snapshot recorded." %></pre>
-              </div>
-              <div class="rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">
-                <p class="font-semibold uppercase tracking-[0.2em] text-slate-400">Output payload</p>
-                <pre class="mt-3 overflow-x-auto whitespace-pre-wrap"><%= pretty_json(run.output_snapshot) %></pre>
-              </div>
-            </div>
-          </div>
-        <% end %>
-      </div>
-    <% else %>
-      <p class="mt-4 text-sm text-slate-600">No agent runs yet. The first implementation slice only creates ticket-backed conversations.</p>
-    <% end %>
-  </section>
 
-  <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-    <h2 class="text-lg font-semibold text-slate-900">Tool Calls</h2>
-    <% if @ticket.tool_calls.any? %>
-      <div class="mt-4 space-y-3">
-        <% @ticket.tool_calls.order(:created_at).each do |call| %>
-          <div class="rounded-2xl border border-slate-200 px-4 py-3">
-            <div class="flex items-center justify-between gap-4">
-              <p class="font-semibold text-slate-900"><%= call.tool_name %></p>
-              <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"><%= call.status %></span>
-            </div>
-            <p class="mt-2 text-sm text-slate-600">Linked run: <%= call.agent_run&.agent_name || "none" %></p>
-            <div class="mt-3 grid gap-3 md:grid-cols-2">
-              <div class="rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">
-                <p class="font-semibold uppercase tracking-[0.2em] text-slate-400">Input payload</p>
-                <pre class="mt-3 overflow-x-auto whitespace-pre-wrap"><%= pretty_json(call.input_payload) %></pre>
+            <% if run_tools.any? %>
+              <div class="mt-4 space-y-3 border-t border-slate-200 pt-4">
+                <% run_tools.each do |call| %>
+                  <div class="rounded-2xl bg-slate-50 px-4 py-3">
+                    <div class="flex items-center justify-between gap-4">
+                      <p class="font-semibold text-slate-900"><%= call.tool_name %></p>
+                      <span class="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700"><%= tool_kind_label(call.tool_name) %></span>
+                    </div>
+                    <details class="mt-3">
+                      <summary class="cursor-pointer text-sm font-medium text-slate-700">View tool payloads</summary>
+                      <div class="mt-3 grid gap-3 md:grid-cols-2">
+                        <div class="rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">
+                          <p class="font-semibold uppercase tracking-[0.2em] text-slate-400">Input payload</p>
+                          <pre class="mt-3 overflow-x-auto whitespace-pre-wrap"><%= pretty_json(call.input_payload) %></pre>
+                        </div>
+                        <div class="rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">
+                          <p class="font-semibold uppercase tracking-[0.2em] text-slate-400">Output payload</p>
+                          <pre class="mt-3 overflow-x-auto whitespace-pre-wrap"><%= pretty_json(call.output_payload) %></pre>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                <% end %>
               </div>
-              <div class="rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">
-                <p class="font-semibold uppercase tracking-[0.2em] text-slate-400">Output payload</p>
-                <pre class="mt-3 overflow-x-auto whitespace-pre-wrap"><%= pretty_json(call.output_payload) %></pre>
+            <% end %>
+
+            <details class="mt-4">
+              <summary class="cursor-pointer text-sm font-medium text-slate-700">View run payload</summary>
+              <div class="mt-3 grid gap-3 md:grid-cols-2">
+                <div class="rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">
+                  <p class="font-semibold uppercase tracking-[0.2em] text-slate-400">Input snapshot</p>
+                  <pre class="mt-3 overflow-x-auto whitespace-pre-wrap"><%= run.input_snapshot.presence || "No input snapshot recorded." %></pre>
+                </div>
+                <div class="rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">
+                  <p class="font-semibold uppercase tracking-[0.2em] text-slate-400">Output payload</p>
+                  <pre class="mt-3 overflow-x-auto whitespace-pre-wrap"><%= pretty_json(run.output_snapshot) %></pre>
+                </div>
               </div>
-            </div>
+            </details>
           </div>
         <% end %>
-      </div>
-    <% else %>
-      <p class="mt-4 text-sm text-slate-600">No tool calls yet.</p>
-    <% end %>
+      <% else %>
+        <p class="text-sm text-slate-600">No agent runs yet. The first implementation slice only creates ticket-backed conversations.</p>
+      <% end %>
+    </div>
   </section>
 </div>

@@ -47,6 +47,12 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_select "input[type='hidden'][name='ticket[company_id]'][value='#{company.id}']"
     assert_select "select[name='ticket[company_id]']", count: 0
     assert_select "button", text: /Chat with support/
+    assert_includes response.body, "cursor-pointer rounded-full bg-slate-900"
+    assert_select "[data-widget-shell-target='customerEmail']"
+    assert_includes response.body, "Example scenarios"
+    assert_includes response.body, "Can I make a picture for UK visa?"
+    assert_select "button[data-scenario-prompt='I did not receive my file, resend the download link']"
+    assert_select "button[data-scenario-email='sara@example.com']"
   end
 
   test "nodes garden company page falls back to the local landing page when live embedding is blocked" do
@@ -77,6 +83,21 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_select "select[name='ticket[company_id]']"
     assert_select "input[name='ticket[email]']"
     assert_select "textarea[name='ticket[content]'][data-action='keydown->enter-submit#submitOnEnter']"
+  end
+
+  test "company-scoped widget entry keeps the frame scrollable for long scenario lists" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+
+    get new_widget_ticket_path(company_id: company.id)
+
+    assert_response :success
+    assert_includes response.body, "flex min-h-0 flex-1 flex-col overflow-y-auto p-5"
+    assert_includes response.body, "Example scenarios"
   end
 
   test "creating a widget ticket stores the first customer message" do
@@ -134,6 +155,7 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_equal 0, ticket.agent_runs.count
     assert_equal 0, ticket.tool_calls.count
     assert_select "turbo-cable-stream-source"
+    assert_select "[data-customer-email='anna@example.com']"
     assert_select "[data-role='assistant-loading']"
     assert_select "textarea[name='message[content]'][data-action='keydown->enter-submit#submitOnEnter']", count: 0
     assert_select "form[action='#{close_widget_ticket_path(ticket)}']", count: 0
@@ -202,6 +224,9 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_includes html, %(data-action="keydown-&gt;enter-submit#submitOnEnter")
     assert_includes html, %(aria-label="Send message")
     assert_includes html, "Close the ticket"
+    assert_includes html, "cursor-pointer rounded-full border border-slate-300"
+    assert_not_includes html, "Example scenarios"
+    assert_not_includes html, "What is the status of my photo request?"
   end
 
   test "rendered chat keeps the transcript in a dedicated scroll region" do
@@ -230,6 +255,35 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
 
     assert_includes html, %(class="flex h-full min-h-0 flex-col")
     assert_includes html, %(class="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1")
+  end
+
+  test "rendered escalated chat shows a human specialist waiting state for customers" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "anna@example.com")
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "escalated",
+      channel: "widget",
+      current_layer: "human",
+      manual_takeover: true,
+      processing: false
+    )
+    ticket.messages.create!(role: "user", content: "My photo was rejected by the embassy and I want a refund right now")
+    ticket.messages.create!(role: "human", content: "Escalated for human review because the customer reports an embassy rejection dispute.")
+
+    html = ApplicationController.render(
+      partial: "widget/tickets/chat",
+      locals: { ticket: ticket }
+    )
+
+    assert_includes html, "A human specialist is now reviewing your ticket"
+    assert_includes html, "You can leave this page safely"
+    assert_not_includes html, "Example scenarios"
   end
 
   test "rendered chat wires transcript auto-scroll behavior" do
@@ -283,6 +337,8 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_equal "resolved", ticket.reload.status
     assert_includes response.body, %(<turbo-stream action="replace" target="#{ActionView::RecordIdentifier.dom_id(ticket, :chat)}">)
     assert_includes response.body, "This conversation is closed."
+    assert_includes response.body, "Start a new conversation"
+    assert_includes response.body, new_widget_ticket_path(company_id: company.id)
     assert_not_includes response.body, widget_ticket_messages_path(ticket)
     assert_includes response.body, %(href="https://www.aipassportphoto.co/contact")
   end
@@ -437,6 +493,13 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
       input_payload: { email: customer.email }.to_json,
       output_payload: { external_id: "APP-1001", status: "completed" }.to_json
     )
+    ticket.tool_calls.create!(
+      agent_run: agent_run,
+      tool_name: "resend_download_link",
+      status: "success",
+      input_payload: { external_id: "APP-1001" }.to_json,
+      output_payload: { external_id: "APP-1001", download_url: "https://example.test/download/APP-1001", completed: true }.to_json
+    )
 
     get ticket_path(ticket)
 
@@ -449,12 +512,17 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "delivery"
     assert_includes response.body, "human-review"
     assert_includes response.body, "lookup_photo_request"
+    assert_includes response.body, "resend_download_link"
 
     get ticket_trace_path(ticket)
 
     assert_response :success
     assert_includes response.body, "Back to ticket"
     assert_includes response.body, "Manual takeover is active"
+    assert_includes response.body, "Customer message"
+    assert_includes response.body, "Specialist step"
+    assert_includes response.body, "Lookup tool"
+    assert_includes response.body, "Action completed"
     assert_includes response.body, "Escalated by pipeline confidence guardrail."
     assert_includes response.body, "external_id"
     assert_includes response.body, "APP-1001"
