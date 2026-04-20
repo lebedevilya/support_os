@@ -1,24 +1,11 @@
-# README
+# SupportOS
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+SupportOS is a Rails + Hotwire demo for a portfolio-wide support operating system. The idea is simple: instead of treating support as a separate chatbot or inbox for each company, one shared support layer can serve multiple startups, keep every conversation ticket-backed, route requests through bounded AI support layers, and hand off to a human in case of escalation. In this demo, the shared support layer serves two companies: `AI Passport Photo` and `nodes.garden`.
 
-Things you may want to cover:
+The app is built around a constrained support pipeline rather than an open-ended agent. Every customer message is stored on a ticket thread and processed through two explicit levels of agentic support. First, `TriageAgent` decides what kind of request this is, whether it can be answered safely from company knowledge (powered by Openrouter's free model). `SpecialistAgent` (powered by GPT) handles the operational step for the supported category using allowed local context for that ticket. If confidence is too low, the request is sensitive, the data is ambiguous, or the workflow falls outside the supported envelope, the system hands the ticket off to a human.
 
-* Ruby version
+The knowledge layer is deliberately split into two parts. Public company knowledge is imported from live company websites and chunked for retrieval, while curated manual knowledge entries provide cleaner support-safe answers for the most important FAQ paths. Triage can answer straightforward public questions directly from that retrieved knowledge before any operational specialist step runs. Operational boundaries are controlled separately through database-backed `SupportRule` records.
 
-* System dependencies
+The reviewer-facing product surfaces are intentionally small and concrete: an overview page that frames the product as a shared support OS, branded company landing pages with an embedded support widget, an internal inbox for all tickets, a ticket detail page, and a dedicated trace page. The trace is there to make the system inspectable: agent decisions, confidence, handoff reasons, and mock tool usage are persisted so the demo behaves like a support system with visible operational history instead of a black-box chat UI.
 
-* Configuration
-
-* Database creation
-
-* Database initialization
-
-* How to run the test suite
-
-* Services (job queues, cache servers, search engines, etc.)
-
-* Deployment instructions
-
-* ...
+Setup is minimal because this is a mostly vanilla Rails app. Install gems with `bundle install`, create and seed the database with `bin/rails db:setup` or `bin/rails db:create db:migrate db:seed`, and start the app with `bin/dev`. Run the test suite with `bin/rails test`.
