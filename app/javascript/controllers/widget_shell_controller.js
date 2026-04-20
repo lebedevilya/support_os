@@ -27,7 +27,8 @@ export default class extends Controller {
     if (!this.hasCustomerEmailTarget) return
 
     const frame = this.element.querySelector("#support_widget")
-    const email = frame?.dataset.customerEmail?.trim()
+    const marker = frame?.querySelector("[data-widget-shell-email]")
+    const email = marker?.dataset.widgetShellEmail?.trim() || frame?.dataset.customerEmail?.trim()
 
     this.customerEmailTarget.textContent = email || ""
     this.customerEmailTarget.classList.toggle("hidden", !email)

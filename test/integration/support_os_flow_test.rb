@@ -80,6 +80,7 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, "Start support conversation"
+    assert_includes response.body, %(data-widget-shell-email="")
     assert_select "select[name='ticket[company_id]']"
     assert_select "input[name='ticket[email]']"
     assert_select "textarea[name='ticket[content]'][data-action='keydown->enter-submit#submitOnEnter']"
@@ -156,6 +157,7 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_equal 0, ticket.tool_calls.count
     assert_select "turbo-cable-stream-source"
     assert_select "[data-customer-email='anna@example.com']"
+    assert_includes response.body, %(data-widget-shell-email="anna@example.com")
     assert_select "[data-role='assistant-loading']"
     assert_select "textarea[name='message[content]'][data-action='keydown->enter-submit#submitOnEnter']", count: 0
     assert_select "form[action='#{close_widget_ticket_path(ticket)}']", count: 0
@@ -219,6 +221,7 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
       locals: { ticket: ticket }
     )
 
+    assert_includes html, %(data-widget-shell-email="anna@example.com")
     assert_includes html, %(action="#{widget_ticket_messages_path(ticket)}")
     assert_includes html, %(action="#{close_widget_ticket_path(ticket)}")
     assert_includes html, %(data-action="keydown-&gt;enter-submit#submitOnEnter")

@@ -1,6 +1,6 @@
 <%= turbo_stream_from ticket %>
 
-<div id="<%= dom_id(ticket, :chat) %>" class="flex h-full min-h-0 flex-col" data-controller="auto-scroll">
+<div id="<%= dom_id(ticket, :chat) %>" class="flex h-full min-h-0 flex-col" data-controller="auto-scroll" data-widget-shell-email="<%= ticket.customer.email %>">
   <div class="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1" data-auto-scroll-target="viewport">
     <% if ticket.current_layer == "human" && ticket.status.in?(%w[escalated in_progress]) %>
       <div class="rounded-3xl border border-amber-200 bg-amber-50 px-4 py-4 text-amber-950 shadow-sm">
