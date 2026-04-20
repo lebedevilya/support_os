@@ -2,6 +2,7 @@ class CompaniesController < ApplicationController
   before_action :set_company
 
   def show
+    @live_site_url = live_site_url_for(@company)
     @landing = landing_content_for(@company)
     @ticket = Ticket.new(company: @company)
   end
@@ -12,28 +13,17 @@ class CompaniesController < ApplicationController
     @company = Company.find_by!(slug: params[:slug])
   end
 
-  def landing_content_for(company)
+  def live_site_url_for(company)
     case company.slug
     when "aipassportphoto"
-      {
-        eyebrow: "AI Passport Photo",
-        hero_title: "Passport Photos That Pass. Guaranteed, in Seconds.",
-        hero_copy: "Upload a selfie, let the AI clean the background, and get a compliant passport or visa photo without hunting for a studio.",
-        primary_cta: "Try Free",
-        secondary_cta: "See requirements",
-        stats: [
-          [ "100+", "country templates" ],
-          [ "Under 60s", "average turnaround" ],
-          [ "Guaranteed", "compliance promise" ]
-        ],
-        features: [
-          "Automatic background removal and crop adjustment",
-          "Templates for US, UK, Canada, and 100+ countries",
-          "Instant download and print-ready delivery"
-        ],
-        spotlight_title: "Built for the annoying part of travel prep",
-        spotlight_copy: "No pharmacies. No booth retakes. No guesswork on size, background, or lighting."
-      }
+      "https://www.aipassportphoto.co/"
+    else
+      nil
+    end
+  end
+
+  def landing_content_for(company)
+    case company.slug
     when "nodes-garden"
       {
         eyebrow: "nodes.garden",

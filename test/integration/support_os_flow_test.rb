@@ -30,7 +30,7 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_select "a[href='#{company_path(nodes_garden.slug)}']", text: /nodes\.garden/
   end
 
-  test "company landing page renders branded page with embedded widget shell" do
+  test "company landing page renders live site iframe with embedded widget shell" do
     company = Company.create!(
       name: "AI Passport Photo",
       slug: "aipassportphoto",
@@ -41,11 +41,31 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     get company_path(company.slug)
 
     assert_response :success
-    assert_includes response.body, "AI Passport Photo"
+    assert_select "iframe[title='#{company.name} site preview'][src='https://www.aipassportphoto.co/']"
     assert_select "[data-controller='widget-shell']"
     assert_select "turbo-frame#support_widget"
     assert_select "input[type='hidden'][name='ticket[company_id]'][value='#{company.id}']"
     assert_select "select[name='ticket[company_id]']", count: 0
+    assert_select "button", text: /Chat with support/
+  end
+
+  test "nodes garden company page falls back to the local landing page when live embedding is blocked" do
+    company = Company.create!(
+      name: "nodes.garden",
+      slug: "nodes-garden",
+      description: "Node deployment and provisioning support",
+      support_email: "support@nodes.garden"
+    )
+
+    get company_path(company.slug)
+
+    assert_response :success
+    assert_select "iframe", count: 0
+    assert_includes response.body, "Launch self-hosted nodes without babysitting infra."
+    assert_includes response.body, "Support embedded on the site"
+    assert_select "[data-controller='widget-shell']"
+    assert_select "turbo-frame#support_widget"
+    assert_select "input[type='hidden'][name='ticket[company_id]'][value='#{company.id}']"
     assert_select "button", text: /Chat with support/
   end
 
