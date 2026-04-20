@@ -1,13 +1,156 @@
 # SupportOS
 
-SupportOS is a Rails + Hotwire demo for a portfolio-wide support operating system. The idea is simple: instead of treating support as a separate chatbot or inbox for each company, one shared support layer can serve multiple startups, keep every conversation ticket-backed, route requests through bounded AI support layers, and hand off to a human in case of escalation. In this demo, the shared support layer serves two companies: `AI Passport Photo` and `nodes.garden`.
+SupportOS is a Rails + Hotwire demo of a shared support layer for multiple startups.
 
-The app is built around a constrained support pipeline rather than an open-ended agent. Every customer message is stored on a ticket thread and processed through two explicit levels of agentic support. First, `TriageAgent` decides what kind of request this is, whether it can be answered safely from company knowledge, whether it should route to a specialist, or whether it should hand off immediately to a human. `SpecialistAgent` is where operational work happens: it looks up seeded business records, uses bounded mock tools such as `lookup_photo_request`, `resend_download_link`, `lookup_deployment`, and `reboot_node`, and drafts the next customer-safe reply from those results. The LLM runtime currently stays on OpenAI through `ruby_llm`. If confidence is too low, the request is sensitive, the data is ambiguous, or the workflow falls outside the supported envelope, the system hands the ticket off to a human.
+Instead of giving each company its own isolated chatbot or inbox, this app models support as one operational system that can:
 
-The knowledge layer is deliberately split into two parts. Public company knowledge is imported from live company websites and chunked for retrieval, while curated manual knowledge entries provide cleaner support-safe answers for the most important FAQ paths. Triage can answer straightforward public questions directly from that retrieved knowledge before any operational specialist step runs. Operational boundaries are controlled separately through database-backed `SupportRule` records.
+- serve multiple companies from the same backend
+- store every conversation as a ticket
+- route requests through bounded AI support layers
+- escalate safely to a human when needed
 
-The reviewer-facing product surfaces are intentionally small and concrete: an overview page that frames the product as a shared support OS, branded company landing pages with an embedded support widget, an internal inbox for all tickets, a ticket detail page, and a dedicated trace page. The widget now supports one-click seeded demo scenarios on a fresh conversation, async follow-ups, clearer human-handoff waiting states, restart-after-close behavior, and a visible customer email in the company widget header once the conversation starts. Example scenarios are shown only for a new chat so the seeded walkthroughs are easy to start without cluttering active conversations. The trace is there to make the system inspectable: customer messages, agent decisions, confidence, handoff reasons, lookup steps, and mock action tools are persisted so the demo behaves like a support system with visible operational history instead of a black-box chat UI.
+The demo currently serves two portfolio companies:
 
-Setup is minimal because this is a mostly vanilla Rails app. Install gems with `bundle install`, create and seed the database with `bin/rails db:setup` or `bin/rails db:create db:migrate db:seed`, and start the app with `bin/dev`. Run the test suite with `bin/rails test`.
+- `AI Passport Photo`
+- `nodes.garden`
 
-For demo deployment, the repo now includes a Kamal setup targeting a single existing server and uses persistent SQLite files in `storage/` for production. The current deploy path assumes a container registry login for `ghcr.io` and mounts a persistent server volume into `/rails/storage` so the SQLite databases survive restarts.
+## What This Repo Demonstrates
+
+- A support widget embedded on branded company pages
+- A ticket-backed conversation model instead of a freeform chat log
+- A constrained AI workflow with explicit routing and escalation
+- An internal inbox for reviewing and handling tickets
+- A trace view that makes agent behavior inspectable
+
+## How It Works
+
+Each customer message enters a bounded support pipeline:
+
+1. The message is stored on a `Ticket`.
+2. `TriageAgent` decides whether the request can be answered from knowledge, should be routed to a specialist, or should be handed to a human immediately.
+3. `SpecialistAgent` performs limited operational work with mock tools and drafts the next safe customer reply.
+4. If the request is ambiguous, sensitive, or low-confidence, the system escalates instead of bluffing.
+
+This is deliberate. The app is not trying to be an unrestricted agent. It is trying to behave like a support system with explicit boundaries.
+
+## Architecture
+
+### Agents
+
+- `TriageAgent`
+  Decides what kind of request the customer made and whether the system should answer, route, or escalate.
+- `SpecialistAgent`
+  Handles operational follow-up using bounded tools and business records.
+
+### Knowledge Sources
+
+- Public website knowledge
+  Imported from company sites and chunked for retrieval.
+- Manual knowledge entries
+  Curated, support-safe answers for the most important FAQ paths.
+- `SupportRule` records
+  Database-backed boundaries that control what the system is allowed to do.
+
+### Operational Tools
+
+The demo includes bounded mock tools such as:
+
+- `lookup_photo_request`
+- `resend_download_link`
+- `lookup_deployment`
+- `reboot_node`
+
+These tools exist to show operational workflows without pretending the system has unlimited access.
+
+### LLM Runtime
+
+- OpenAI via `ruby_llm`
+- used inside a constrained workflow, not as a general-purpose agent shell
+
+## Product Surfaces
+
+- Overview page that frames the product as a shared support OS
+- Company landing pages with an embedded support widget
+- Internal inbox for all tickets
+- Ticket detail page
+- Trace page for agent decisions and tool activity
+
+## Widget Features
+
+- One-click seeded demo scenarios for a fresh conversation
+- Async follow-up messages
+- Human handoff waiting states
+- Restart-after-close flow
+- Customer email shown in the company widget header after the conversation starts
+
+Example scenarios only appear for a new chat. Once a conversation is active, the widget removes that noise.
+
+## Why The Trace Matters
+
+Most AI demos hide the interesting part. This one does not.
+
+The trace view persists and exposes:
+
+- customer messages
+- agent decisions
+- confidence values
+- handoff reasons
+- lookup steps
+- mock tool activity
+
+That makes the system inspectable as an operations product, not just a chat UI.
+
+## Local Setup
+
+### Requirements
+
+- Ruby / Bundler matching the app
+- SQLite
+
+### Install
+
+```bash
+bundle install
+bin/rails db:setup
+```
+
+### Run
+
+```bash
+bin/dev
+```
+
+### Test
+
+```bash
+bin/rails test
+```
+
+If you prefer the explicit database flow instead of `db:setup`:
+
+```bash
+bin/rails db:create db:migrate db:seed
+```
+
+## Deployment
+
+This repo includes a Kamal deployment setup for a single server.
+
+Production uses persistent SQLite files in `storage/`, so the deploy relies on a mounted volume at `/rails/storage`.
+
+Current deployment assumptions:
+
+- image registry is `ghcr.io`
+- the server has registry credentials available
+- the SQLite storage volume is mounted persistently
+
+Without that volume, production data will not survive container restarts.
+
+## Positioning
+
+This project is a demo of a portfolio-wide support operating system:
+
+- one support layer across multiple products
+- bounded AI instead of fake autonomy
+- ticketing and traceability instead of black-box chat
+- clear escalation paths instead of confident nonsense
