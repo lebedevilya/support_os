@@ -150,16 +150,17 @@ The most recently verified flows:
 - closing a conversation now offers an in-widget `Start a new conversation` path with the same company preselected
 - the company-scoped new-ticket frame now stays scrollable after closing and reopening a chat
 - escalated or human-owned widget conversations now show a customer-facing waiting state instead of exposing raw operator handoff wording
+- the embedded company widget header now shows the active customer email once the conversation starts
 
 Most recently re-run tests:
 
 - command: `bin/rails test test/integration/support_os_flow_test.rb`
-- result: `20 runs, 274 assertions, 0 failures, 0 errors, 0 skips`
+- result: `20 runs, 278 assertions, 0 failures, 0 errors, 0 skips`
 
 Latest full-suite result:
 
 - command: `PARALLEL_WORKERS=1 bin/rails test`
-- result: `60 runs, 494 assertions, 0 failures, 0 errors, 0 skips`
+- result: `60 runs, 498 assertions, 0 failures, 0 errors, 0 skips`
 
 ## What Matches The Plan
 
