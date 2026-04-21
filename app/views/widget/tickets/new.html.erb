@@ -1,15 +1,17 @@
-<%= turbo_frame_tag "support_widget", data: { customer_email: @customer&.email } do %>
-  <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-5" data-widget-shell-email="<%= @customer&.email %>">
-    <div class="space-y-2">
-      <% if @company.present? %>
-        <h2 class="text-2xl font-bold tracking-tight text-slate-900">Start support conversation</h2>
-        <p class="text-sm text-slate-600">Ask a question without leaving <%= @company.name %>.</p>
-      <% else %>
-        <h1 class="text-3xl font-bold tracking-tight text-slate-900">Start support conversation</h1>
-        <p class="text-sm text-slate-600">This demo turns each message into a support ticket behind the scenes.</p>
-      <% end %>
-    </div>
+<%= render "standalone_shell", company: @company do %>
+  <%= turbo_frame_tag "support_widget", class: "flex min-h-0 flex-1 flex-col", data: { customer_email: @customer&.email } do %>
+    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-5" data-widget-shell-email="<%= @customer&.email %>">
+      <div class="space-y-2">
+        <% if @company.present? %>
+          <h2 class="text-2xl font-bold tracking-tight text-slate-900">Start support conversation</h2>
+          <p class="text-sm text-slate-600">Ask a question without leaving <%= @company.name %>.</p>
+        <% else %>
+          <h1 class="text-3xl font-bold tracking-tight text-slate-900">Start support conversation</h1>
+          <p class="text-sm text-slate-600">This demo turns each message into a support ticket behind the scenes.</p>
+        <% end %>
+      </div>
 
-    <%= render "form", ticket: @ticket, companies: @companies, customer: @customer, company: @company %>
-  </div>
+      <%= render "form", ticket: @ticket, companies: @companies, customer: @customer, company: @company %>
+    </div>
+  <% end %>
 <% end %>

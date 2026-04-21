@@ -2,6 +2,10 @@
 
 <div id="<%= dom_id(ticket, :chat) %>" class="flex h-full min-h-0 flex-col" data-controller="auto-scroll" data-widget-shell-email="<%= ticket.customer.email %>">
   <div class="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1" data-auto-scroll-target="viewport">
+    <% ticket.messages.order(:created_at).each do |message| %>
+      <%= render "widget/tickets/message", message: message %>
+    <% end %>
+
     <% if ticket.current_layer == "human" && ticket.status.in?(%w[escalated in_progress]) %>
       <div class="rounded-3xl border border-amber-200 bg-amber-50 px-4 py-4 text-amber-950 shadow-sm">
         <p class="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">Waiting On Human Specialist</p>
@@ -10,10 +14,6 @@
           Please wait for a response. You can leave this page safely and we will also send the reply to your email.
         </p>
       </div>
-    <% end %>
-
-    <% ticket.messages.order(:created_at).each do |message| %>
-      <%= render "widget/tickets/message", message: message %>
     <% end %>
 
     <% if ticket.processing? %>
@@ -55,7 +55,13 @@
       </div>
     <% end %>
 
-    <div class="mt-4 flex justify-start">
+    <div class="mt-4 flex justify-start gap-3">
+      <% if ticket.human_handoff_available? && !ticket.manual_takeover? %>
+        <%= form_with url: handoff_widget_ticket_path(ticket), method: :patch, class: "inline" do %>
+          <%= submit_tag "Chat to human", class: "cursor-pointer rounded-full bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-700" %>
+        <% end %>
+      <% end %>
+
       <%= form_with url: close_widget_ticket_path(ticket), method: :patch, class: "inline" do %>
         <%= submit_tag "Close the ticket", class: "cursor-pointer rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:border-slate-900 hover:bg-slate-900 hover:text-white" %>
       <% end %>

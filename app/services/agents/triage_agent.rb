@@ -1,5 +1,12 @@
 module Agents
   class TriageAgent
+    GREETING_PATTERNS = [
+      /\A(?:hi|hello|hey|hey there|yo|good morning|good afternoon|good evening)[.!? ]*\z/i,
+      /\A(?:can you help\??|help\??)\z/i
+    ].freeze
+    OFF_TOPIC_PATTERNS = [
+      /weather/i
+    ].freeze
     KNOWLEDGE_MIN_SCORE = 2
 
     def initialize(ticket:, llm_client: nil)
@@ -17,23 +24,15 @@ module Agents
       knowledge_result = knowledge_answer
       return knowledge_result if knowledge_result
 
+      blocker_fallback = blocked_request_handoff_result
+      return blocker_fallback if blocker_fallback
+
+      conversational_fallback = fallback_conversation_result
+      return conversational_fallback if conversational_fallback
+
       return llm_triage if @llm_client
 
-      {
-        source: "fallback",
-        status: "escalated",
-        category: "other",
-        priority: "normal",
-        route: "escalate",
-        current_layer: "human",
-        confidence: 0.55,
-        decision: "escalate",
-        escalation_reason: "The request is outside the supported demo cases.",
-        handoff_note: "Escalated for human review because the request does not fit the current automated support envelope.",
-        reasoning_summary: "Unknown request type for the current demo scope.",
-        input_snapshot: latest_message.content,
-        tags: %w[other human-review unknown-request]
-      }
+      default_clarify_result
     end
 
     private
@@ -63,21 +62,20 @@ module Agents
       )
       return unless response[:needs_human_handoff] == true
 
-      {
+      human_handoff_offer_result(
         source: "llm_human_handoff",
-        status: "escalated",
         category: "other",
         priority: "high",
-        route: "escalate",
-        current_layer: "human",
+        current_layer: "triage",
         confidence: numeric_confidence(response[:confidence]),
-        decision: "escalate",
         escalation_reason: "The customer explicitly requested human support.",
-        handoff_note: "Escalated to human support because the customer explicitly asked for a human agent in this chat.",
+        handoff_note: "The customer explicitly asked for a human specialist in this chat.",
+        summary: "The customer explicitly requested human support.",
+        reply: "A human specialist can take over this conversation. Use the button below if you want to chat with a human.",
         reasoning_summary: response[:reasoning_summary].presence || "Explicit human handoff request bypassed automated support.",
         input_snapshot: latest_message.content,
         tags: normalized_tags(response[:tags], fallback_tags: %w[human-review explicit-human-request escalate])
-      }
+      )
     rescue StandardError
       nil
     end
@@ -198,13 +196,17 @@ module Agents
           Return keys:
           - category: one of billing, delivery, refund, policy, account, technical, other
           - priority: one of low, normal, high
-          - route: knowledge_answer, specialist, or escalate
+          - route: clarify, knowledge_answer, specialist, or offer_human_handoff
           - confidence: decimal between 0 and 1
           - needs_human_now: boolean
-          - reply: optional string when route is knowledge_answer
+          - reply: optional string when route is clarify or knowledge_answer or offer_human_handoff
           - reasoning_summary: short sentence
           - tags: array of strings
-          If the request mentions embassy rejection, government rejection, or a disputed refund, route to escalate.
+          Rules:
+          - greetings, vague openers, or low-information messages should use clarify with a short company-specific follow-up question
+          - off-topic chatter should use clarify with a brief redirect back to company support
+          - requests that need human involvement should use offer_human_handoff, not escalate automatically
+          - if the request mentions embassy rejection, government rejection, or a disputed refund, route to offer_human_handoff
         PROMPT
         context: {
           company: @ticket.company.name,
@@ -216,43 +218,26 @@ module Agents
 
       build_llm_result(response)
     rescue StandardError => e
-      {
-        source: "llm_error_fallback",
-        status: "escalated",
-        category: "other",
-        priority: "normal",
-        route: "escalate",
-        current_layer: "human",
-        confidence: 0.0,
-        decision: "escalate",
-        escalation_reason: "The LLM triage step failed.",
-        handoff_note: "Escalated for human review because automated triage failed: #{e.message}",
-        reasoning_summary: "LLM triage failure.",
-        input_snapshot: latest_message.content,
-        tags: %w[other human-review llm-failure]
-      }
+      default_clarify_result(source: "llm_error_fallback", confidence: 0.0, reasoning_summary: "LLM triage failure: #{e.message}")
     end
 
     def build_llm_result(response)
-      route =
-        if response[:needs_human_now] || response[:route].to_s == "escalate"
-          "escalate"
-        else
-          "specialist"
-        end
+      route = normalized_route(response)
+
+      return clarify_result(response) if route == "clarify"
+      return knowledge_answer_result(response) if route == "knowledge_answer"
+      return handoff_offer_result(response) if route == "offer_human_handoff"
 
       {
         source: "llm",
-        status: route == "escalate" ? "escalated" : "in_progress",
+        status: "in_progress",
         category: normalized_category(response[:category]),
         priority: normalized_priority(response[:priority]),
         route: route,
-        current_layer: route == "escalate" ? "human" : "specialist",
+        current_layer: "specialist",
         confidence: numeric_confidence(response[:confidence]),
-        decision: route == "escalate" ? "escalate" : "triage",
+        decision: "triage",
         reply: nil,
-        escalation_reason: (route == "escalate" ? "The request requires human review." : nil),
-        handoff_note: (route == "escalate" ? "Escalated for human review based on the triage decision." : nil),
         reasoning_summary: response[:reasoning_summary].presence || "Triage completed.",
         input_snapshot: latest_message.content,
         tags: normalized_tags(response[:tags], fallback_tags: triage_tags(response, route))
@@ -265,6 +250,157 @@ module Agents
 
     def public_knowledge_blocked_by_rule?
       SupportRuleMatcher.new(company: @ticket.company, content: latest_message.content, blocker_only: true).call.present?
+    end
+
+    def blocked_request_handoff_result
+      return unless public_knowledge_blocked_by_rule?
+
+      human_handoff_offer_result(
+        source: "fallback",
+        category: "other",
+        priority: "normal",
+        current_layer: "triage",
+        confidence: 0.7,
+        escalation_reason: "This request needs specialist or human review and should not be answered from public knowledge.",
+        handoff_note: "A human specialist should review this request because it falls outside the public-knowledge support path.",
+        summary: "The request matched a support boundary that blocks public-knowledge answers.",
+        reply: "This request needs a specialist review. If you want, I can connect you with a human specialist.",
+        reasoning_summary: "The request was blocked from public-knowledge answering and no safe automated fallback was available.",
+        input_snapshot: latest_message.content,
+        tags: %w[human-review support-boundary]
+      )
+    end
+
+    def fallback_conversation_result
+      return default_clarify_result if greeting_message?
+      return off_topic_redirect_result if off_topic_message?
+
+      nil
+    end
+
+    def greeting_message?
+      GREETING_PATTERNS.any? { |pattern| latest_message.content.to_s.match?(pattern) }
+    end
+
+    def off_topic_message?
+      OFF_TOPIC_PATTERNS.any? { |pattern| latest_message.content.to_s.match?(pattern) }
+    end
+
+    def default_clarify_result(source: "fallback", confidence: 0.9, reasoning_summary: "The message is too vague to route yet.")
+      {
+        source: source,
+        status: "awaiting_customer",
+        category: "other",
+        priority: "low",
+        route: "clarify",
+        current_layer: "triage",
+        confidence: confidence,
+        decision: "clarify",
+        reply: "Hello! I can help with #{@ticket.company.name} support. What do you need help with today?",
+        reasoning_summary: reasoning_summary,
+        input_snapshot: latest_message.content,
+        tags: %w[clarify greeting]
+      }
+    end
+
+    def off_topic_redirect_result
+      {
+        source: "fallback",
+        status: "awaiting_customer",
+        category: "other",
+        priority: "low",
+        route: "clarify",
+        current_layer: "triage",
+        confidence: 0.92,
+        decision: "clarify",
+        reply: "I’m here to help with #{@ticket.company.name} support. Tell me what you need help with and I’ll take it from there.",
+        reasoning_summary: "The message is off-topic, so triage redirected the customer back to product support.",
+        input_snapshot: latest_message.content,
+        tags: %w[clarify off-topic]
+      }
+    end
+
+    def normalized_route(response)
+      return "offer_human_handoff" if response[:needs_human_now]
+
+      candidate = response[:route].to_s
+      return "clarify" if candidate == "clarify"
+      return "knowledge_answer" if candidate == "knowledge_answer"
+      return "offer_human_handoff" if %w[offer_human_handoff escalate].include?(candidate)
+
+      "specialist"
+    end
+
+    def clarify_result(response)
+      {
+        source: "llm",
+        status: "awaiting_customer",
+        category: normalized_category(response[:category]),
+        priority: normalized_priority(response[:priority]),
+        route: "clarify",
+        current_layer: "triage",
+        confidence: numeric_confidence(response[:confidence]),
+        decision: "clarify",
+        reply: response[:reply].presence || default_clarify_result[:reply],
+        reasoning_summary: response[:reasoning_summary].presence || "The customer needs to clarify the support request.",
+        input_snapshot: latest_message.content,
+        tags: normalized_tags(response[:tags], fallback_tags: %w[clarify])
+      }
+    end
+
+    def knowledge_answer_result(response)
+      {
+        source: "llm",
+        status: "awaiting_customer",
+        category: normalized_category(response[:category]),
+        priority: normalized_priority(response[:priority]),
+        route: "knowledge_answer",
+        current_layer: "triage",
+        confidence: numeric_confidence(response[:confidence]),
+        decision: "knowledge_answer",
+        reply: response[:reply],
+        reasoning_summary: response[:reasoning_summary].presence || "Triage answered directly.",
+        input_snapshot: latest_message.content,
+        tags: normalized_tags(response[:tags], fallback_tags: triage_tags(response, "knowledge_answer"))
+      }
+    end
+
+    def handoff_offer_result(response)
+      human_handoff_offer_result(
+        source: "llm",
+        category: normalized_category(response[:category]),
+        priority: normalized_priority(response[:priority]),
+        current_layer: "triage",
+        confidence: numeric_confidence(response[:confidence]),
+        escalation_reason: "The request requires human review.",
+        handoff_note: "A human specialist should review this case before the next reply.",
+        summary: response[:reasoning_summary].presence || "Triage determined the request should be reviewed by a human specialist.",
+        reply: response[:reply].presence || "This case needs human review. Use the button below if you want a human specialist to take over.",
+        reasoning_summary: response[:reasoning_summary].presence || "Triage offered a human handoff.",
+        input_snapshot: latest_message.content,
+        tags: normalized_tags(response[:tags], fallback_tags: triage_tags(response, "offer_human_handoff"))
+      )
+    end
+
+    def human_handoff_offer_result(source:, category:, priority:, current_layer:, confidence:, escalation_reason:, handoff_note:, summary:, reply:, reasoning_summary:, input_snapshot:, tags:)
+      {
+        source: source,
+        status: "awaiting_customer",
+        category: category,
+        priority: priority,
+        route: "offer_human_handoff",
+        current_layer: current_layer,
+        confidence: confidence,
+        decision: "offer_human_handoff",
+        escalation_reason: escalation_reason,
+        handoff_note: handoff_note,
+        summary: summary,
+        reply: reply,
+        reasoning_summary: reasoning_summary,
+        input_snapshot: input_snapshot,
+        human_handoff_available: true,
+        tags: tags
+      }
     end
 
     def normalized_category(value)

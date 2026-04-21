@@ -15,6 +15,7 @@ Rails.application.routes.draw do
     resources :tickets, only: [ :new, :create ] do
       member do
         patch :close
+        patch :handoff
       end
       resources :messages, only: [ :create ]
     end

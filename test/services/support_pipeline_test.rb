@@ -90,7 +90,7 @@ class SupportPipelineTest < ActiveSupport::TestCase
     assert_includes ticket.messages.order(:created_at).last.content, "UK"
   end
 
-  test "escalates an embassy refund dispute to human" do
+  test "offers a manual human handoff for an embassy refund dispute" do
     SupportRule.create!(
       name: "Embassy refund dispute",
       active: true,
@@ -118,11 +118,13 @@ class SupportPipelineTest < ActiveSupport::TestCase
 
     ticket.reload
 
-    assert_equal "escalated", ticket.status
-    assert_equal "human", ticket.current_layer
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "triage", ticket.current_layer
     assert_equal "refund", ticket.category
-    assert_equal 2, ticket.agent_runs.count
-    assert_equal "human", ticket.messages.order(:created_at).last.role
+    assert_equal false, ticket.manual_takeover
+    assert_equal true, ticket.human_handoff_available
+    assert_equal 1, ticket.agent_runs.count
+    assert_equal "assistant", ticket.messages.order(:created_at).last.role
     assert_includes ticket.escalation_reason, "human review"
     assert_includes ticket.handoff_note, "embassy"
     assert_equal "support_rule", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
@@ -401,7 +403,47 @@ class SupportPipelineTest < ActiveSupport::TestCase
     assert_equal "llm", JSON.parse(specialist_run.output_snapshot).fetch("source")
   end
 
-  test "escalates when triage confidence is below the guardrail" do
+  test "clarifies a greeting instead of escalating to human" do
+    ticket = @company.tickets.create!(
+      customer: @customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "hey there")
+
+    llm_client = FakeLlmClient.new(
+      {
+        needs_human_handoff: false,
+        confidence: 0.93,
+        reasoning_summary: "The customer is not explicitly asking for a human handoff."
+      },
+      {
+        category: "other",
+        priority: "low",
+        route: "clarify",
+        confidence: 0.97,
+        needs_human_now: false,
+        reply: "Hello! I can help with AI Passport Photo support. What do you need help with today?",
+        reasoning_summary: "This is a greeting with no concrete support issue yet.",
+        tags: [ "greeting", "clarify" ]
+      }
+    )
+
+    SupportPipeline.new(ticket: ticket, llm_client: llm_client).call
+
+    ticket.reload
+
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "triage", ticket.current_layer
+    assert_equal false, ticket.manual_takeover
+    assert_equal false, ticket.human_handoff_available
+    assert_equal [ "TriageAgent" ], ticket.agent_runs.order(:created_at).pluck(:agent_name)
+    assert_equal [ "user", "assistant" ], ticket.messages.order(:created_at).pluck(:role)
+    assert_includes ticket.messages.order(:created_at).last.content, "What do you need help with today?"
+  end
+
+  test "offers manual human handoff instead of auto escalating when triage confidence is below the guardrail" do
     ticket = @company.tickets.create!(
       customer: @customer,
       status: "new",
@@ -430,16 +472,58 @@ class SupportPipelineTest < ActiveSupport::TestCase
 
     ticket.reload
 
-    assert_equal "escalated", ticket.status
-    assert_equal "human", ticket.current_layer
-    assert_equal 2, ticket.agent_runs.count
-    assert_equal [ "TriageAgent", "HumanHandoff" ], ticket.agent_runs.order(:created_at).pluck(:agent_name)
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "triage", ticket.current_layer
+    assert_equal false, ticket.manual_takeover
+    assert_equal true, ticket.human_handoff_available
+    assert_equal 1, ticket.agent_runs.count
+    assert_equal "assistant", ticket.messages.order(:created_at).last.role
+    assert_includes ticket.summary, "confidence"
+    assert_includes ticket.escalation_reason, "confidence"
+    assert_includes ticket.messages.order(:created_at).last.content.downcase, "human"
+  end
+
+  test "offers manual human handoff when triage confidence is below the guardrail" do
+    ticket = @company.tickets.create!(
+      customer: @customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Do you support Canada passport photos?")
+
+    llm_client = FakeLlmClient.new(
+      {
+        needs_human_handoff: false,
+        confidence: 0.94,
+        reasoning_summary: "The customer is not explicitly asking for a human handoff."
+      },
+      {
+        category: "policy",
+        priority: "normal",
+        route: "specialist",
+        confidence: 0.59,
+        needs_human_now: false,
+        reasoning_summary: "This looks like a support question but confidence is weak."
+      }
+    )
+
+    SupportPipeline.new(ticket: ticket, llm_client: llm_client).call
+
+    ticket.reload
+
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "triage", ticket.current_layer
+    assert_equal false, ticket.manual_takeover
+    assert_equal true, ticket.human_handoff_available
+    assert_equal 1, ticket.agent_runs.count
+    assert_equal [ "TriageAgent" ], ticket.agent_runs.order(:created_at).pluck(:agent_name)
     assert_equal 2, llm_client.calls.size
-    assert_equal "human", ticket.messages.order(:created_at).last.role
+    assert_equal "assistant", ticket.messages.order(:created_at).last.role
     assert_includes ticket.escalation_reason, "confidence"
   end
 
-  test "escalates when specialist confidence is below the guardrail even if it drafted a reply" do
+  test "offers manual human handoff when specialist confidence is below the guardrail even if it drafted a reply" do
     KnowledgeArticle.create!(
       company: @company,
       title: "Supported Countries",
@@ -483,16 +567,72 @@ class SupportPipelineTest < ActiveSupport::TestCase
 
     ticket.reload
 
-    assert_equal "escalated", ticket.status
-    assert_equal "human", ticket.current_layer
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "specialist", ticket.current_layer
+    assert_equal false, ticket.manual_takeover
+    assert_equal true, ticket.human_handoff_available
     assert_equal 2, ticket.agent_runs.count
     assert_equal [ "TriageAgent", "SpecialistAgent" ], ticket.agent_runs.order(:created_at).pluck(:agent_name)
-    assert_equal "human", ticket.messages.order(:created_at).last.role
+    assert_equal "assistant", ticket.messages.order(:created_at).last.role
     assert_includes ticket.escalation_reason, "confidence"
     assert_includes ticket.handoff_note, "human review"
   end
 
-  test "llm triage escalates an explicit request for a human before public knowledge routing" do
+  test "offers manual human handoff instead of auto escalating when specialist confidence is below the guardrail" do
+    KnowledgeArticle.create!(
+      company: @company,
+      title: "Supported Countries",
+      category: "policy",
+      content: "We support passport photo formats for Canada, the US, the UK, and Schengen countries."
+    )
+
+    ticket = @company.tickets.create!(
+      customer: @customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Do you support Canada passport photos?")
+
+    llm_client = FakeLlmClient.new(
+      {
+        needs_human_handoff: false,
+        confidence: 0.94,
+        reasoning_summary: "The customer is not explicitly asking for a human handoff."
+      },
+      {
+        category: "policy",
+        priority: "normal",
+        route: "specialist",
+        confidence: 0.91,
+        needs_human_now: false,
+        reasoning_summary: "The customer is asking a supported-country question."
+      },
+      {
+        reply: "Yes. Canada passport photos are supported.",
+        resolve_ticket: true,
+        confidence: 0.69,
+        used_knowledge_articles: [ "Supported Countries" ],
+        used_tools: [],
+        reasoning_summary: "The knowledge is relevant but confidence is still too weak."
+      }
+    )
+
+    SupportPipeline.new(ticket: ticket, llm_client: llm_client).call
+
+    ticket.reload
+
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "specialist", ticket.current_layer
+    assert_equal false, ticket.manual_takeover
+    assert_equal true, ticket.human_handoff_available
+    assert_equal [ "TriageAgent", "SpecialistAgent" ], ticket.agent_runs.order(:created_at).pluck(:agent_name)
+    assert_equal "assistant", ticket.messages.order(:created_at).last.role
+    assert_includes ticket.summary, "confidence"
+    assert_includes ticket.messages.order(:created_at).last.content.downcase, "human"
+  end
+
+  test "llm triage offers manual human handoff for an explicit request before public knowledge routing" do
     source = Knowledge::Source.create!(
       company: @company,
       url: "https://www.aipassportphoto.co/contact",
@@ -528,10 +668,12 @@ class SupportPipelineTest < ActiveSupport::TestCase
 
     ticket.reload
 
-    assert_equal "escalated", ticket.status
-    assert_equal "human", ticket.current_layer
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "triage", ticket.current_layer
+    assert_equal false, ticket.manual_takeover
+    assert_equal true, ticket.human_handoff_available
     assert_equal [ "human_handoff_intent" ], llm_client.calls.map { |call| call[:task] }
-    assert_equal "human", ticket.messages.order(:created_at).last.role
+    assert_equal "assistant", ticket.messages.order(:created_at).last.role
     refute_equal "public_knowledge", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
   end
 

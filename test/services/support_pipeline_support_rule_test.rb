@@ -1,7 +1,7 @@
 require "test_helper"
 
 class SupportPipelineSupportRuleTest < ActiveSupport::TestCase
-  test "escalates an embassy refund dispute through a support rule" do
+  test "offers a manual human handoff for an embassy refund dispute through a support rule" do
     company = Company.create!(
       name: "AI Passport Photo",
       slug: "aipassportphoto",
@@ -37,11 +37,14 @@ class SupportPipelineSupportRuleTest < ActiveSupport::TestCase
 
     ticket.reload
 
-    assert_equal "escalated", ticket.status
-    assert_equal "human", ticket.current_layer
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "triage", ticket.current_layer
+    assert_equal false, ticket.manual_takeover
+    assert_equal true, ticket.human_handoff_available
     assert_equal "refund", ticket.category
-    assert_equal 2, ticket.agent_runs.count
-    assert_equal "human", ticket.messages.order(:created_at).last.role
+    assert_equal 1, ticket.agent_runs.count
+    assert_equal "assistant", ticket.messages.order(:created_at).last.role
+    assert_includes ticket.messages.order(:created_at).last.content.downcase, "human"
 
     triage_run = ticket.agent_runs.order(:created_at).first
     triage_snapshot = JSON.parse(triage_run.output_snapshot)

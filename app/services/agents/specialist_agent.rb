@@ -85,19 +85,12 @@ module Agents
           tags: delivery_tags(action)
         }
       else
-        {
-          source: "fallback",
-          status: "escalated",
-          current_layer: "human",
-          confidence: 0.64,
-          decision: "escalate",
-          escalation_reason: "No matching business record was found for the delivery issue.",
-          handoff_note: "Escalated for human review because no matching business record was found for this delivery request.",
-          reply: "I could not safely verify your request, so I have escalated this to a human reviewer.",
-          reasoning_summary: "Delivery issue requires data that is not available in the demo records.",
-          input_snapshot: latest_message.content,
+        handoff_offer_result(
+          reason: "No matching business record was found for the delivery issue.",
+          reply: "I could not safely verify your request automatically. If you want, I can connect you with a human specialist.",
+          summary: "Delivery issue requires human review because no matching business record was found in the demo data.",
           tags: %w[delivery human-review missing-record]
-        }
+        )
       end
     end
 
@@ -140,36 +133,22 @@ module Agents
           tags: technical_tags(action)
         }
       else
-        {
-          source: "fallback",
-          status: "escalated",
-          current_layer: "human",
-          confidence: 0.62,
-          decision: "escalate",
-          escalation_reason: "No deployment record was found for the provisioning request.",
-          handoff_note: "Escalated for human review because no deployment record was found for this node provisioning request.",
-          reply: "I could not safely verify the deployment status, so I have escalated this to a human reviewer.",
-          reasoning_summary: "Technical request requires a deployment record that is not available in the demo data.",
-          input_snapshot: latest_message.content,
+        handoff_offer_result(
+          reason: "No deployment record was found for the provisioning request.",
+          reply: "I could not safely verify the deployment status automatically. If you want, I can connect you with a human specialist.",
+          summary: "Technical request requires human review because no deployment record was found in the demo data.",
           tags: %w[technical human-review missing-record]
-        }
+        )
       end
     end
 
     def escalate_unknown
-      {
-        source: "fallback",
-        status: "escalated",
-        current_layer: "human",
-        confidence: 0.6,
-        decision: "escalate",
-        escalation_reason: "No specialist path is implemented for this category.",
-        handoff_note: "Escalated for human review because no safe specialist path exists for this request.",
-        reply: "I have escalated this request to a human reviewer.",
-        reasoning_summary: "No specialist workflow exists for the current category.",
-        input_snapshot: latest_message.content,
+      handoff_offer_result(
+        reason: "No specialist path is implemented for this category.",
+        reply: "This case needs a human specialist. Use the button below if you want a human to take over.",
+        summary: "No safe specialist workflow exists for the current category.",
         tags: %w[human-review unsupported-category]
-      }
+      )
     end
 
     def latest_message
@@ -411,19 +390,12 @@ module Agents
     end
 
     def action_escalation_result(reason)
-      {
-        source: "fallback",
-        status: "escalated",
-        current_layer: "human",
-        confidence: 0.64,
-        decision: "escalate",
-        escalation_reason: reason,
-        handoff_note: "Escalated for human review because the specialist action could not be completed safely.",
-        reply: "I could not safely complete that request, so I have escalated it to a human reviewer.",
-        reasoning_summary: reason,
-        input_snapshot: latest_message.content,
+      handoff_offer_result(
+        reason: reason,
+        reply: "I could not safely complete that request automatically. If you want, I can connect you with a human specialist.",
+        summary: reason,
         tags: normalized_tags(nil, fallback_tags: specialist_tags(false))
-      }
+      )
     end
 
     def tool_payload(tool_result)
@@ -439,33 +411,30 @@ module Agents
 
       {
         source: "llm",
-        status: resolve ? "awaiting_customer" : "escalated",
-        current_layer: resolve ? "specialist" : "human",
+        status: "awaiting_customer",
+        current_layer: resolve ? "specialist" : "specialist",
         confidence: numeric_confidence(response[:confidence]),
-        decision: resolve ? "answered" : "escalate",
-        reply: response[:reply],
+        decision: resolve ? "answered" : "offer_human_handoff",
+        reply: response[:reply].presence || (resolve ? nil : "This case needs human review. Use the button below if you want a human specialist to take over."),
+        summary: (resolve ? nil : response[:reasoning_summary].presence || "The specialist decision requires human review."),
         escalation_reason: (resolve ? nil : "The specialist decision requires human review."),
-        handoff_note: (resolve ? nil : "Escalated for human review based on the specialist decision."),
+        handoff_note: (resolve ? nil : "A human specialist should review this case before the next reply."),
         reasoning_summary: response[:reasoning_summary].presence || "Specialist completed.",
         input_snapshot: latest_message.content,
+        human_handoff_available: !resolve,
         tags: normalized_tags(response[:tags], fallback_tags: specialist_tags(resolve))
       }
     end
 
     def llm_failure_result(message)
-      {
+      handoff_offer_result(
         source: "llm_error_fallback",
-        status: "escalated",
-        current_layer: "human",
         confidence: 0.0,
-        decision: "escalate",
-        escalation_reason: message,
-        handoff_note: "Escalated for human review because the specialist step failed.",
-        reply: "I could not safely complete this request, so I have escalated it to a human reviewer.",
-        reasoning_summary: message,
-        input_snapshot: latest_message.content,
+        reason: message,
+        reply: "I could not safely complete this request automatically. If you want, I can connect you with a human specialist.",
+        summary: message,
         tags: normalized_tags(nil, fallback_tags: specialist_tags(false) + [ "llm-failure" ])
-      }
+      )
     end
 
     def related_articles
@@ -497,6 +466,25 @@ module Agents
     def normalize_tag(value)
       candidate = value.to_s.parameterize
       candidate.presence
+    end
+
+    def handoff_offer_result(reason:, reply:, summary:, tags:, source: "fallback", confidence: 0.64)
+      {
+        source: source,
+        status: "awaiting_customer",
+        current_layer: "specialist",
+        confidence: confidence,
+        decision: "offer_human_handoff",
+        route: "offer_human_handoff",
+        escalation_reason: reason,
+        handoff_note: "A human specialist should review this case before the next reply because it needs human review.",
+        summary: summary,
+        reply: reply,
+        reasoning_summary: reason,
+        input_snapshot: latest_message.content,
+        human_handoff_available: true,
+        tags: tags
+      }
     end
   end
 end

@@ -21,6 +21,12 @@
       <p class="text-sm font-semibold text-amber-950">Human-owned ticket</p>
       <p class="mt-2 text-sm text-amber-900">New customer replies now stay with support and will not re-enter the automation pipeline.</p>
     </section>
+  <% elsif @ticket.human_handoff_available? && @ticket.summary.present? %>
+    <section class="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+      <p class="text-sm font-semibold text-amber-950">Human specialist summary</p>
+      <p class="mt-2 text-sm text-amber-900"><%= @ticket.summary %></p>
+      <p class="mt-2 text-sm text-amber-900">Automation recommended human review, but the customer has not accepted handoff yet.</p>
+    </section>
   <% end %>
 
   <section class="grid gap-6 md:grid-cols-2">

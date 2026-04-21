@@ -18,6 +18,12 @@
       <p class="text-sm font-semibold text-amber-950">Manual takeover is active.</p>
       <p class="mt-2 text-sm text-amber-900">Automation has already stopped for this ticket. New customer replies now stay with support.</p>
     </section>
+  <% elsif @ticket.human_handoff_available? && @ticket.summary.present? %>
+    <section class="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+      <p class="text-sm font-semibold text-amber-950">Human specialist summary</p>
+      <p class="mt-2 text-sm text-amber-900"><%= @ticket.summary %></p>
+      <p class="mt-2 text-sm text-amber-900">Automation recommended human review, but the customer has not accepted handoff yet.</p>
+    </section>
   <% end %>
 
   <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">

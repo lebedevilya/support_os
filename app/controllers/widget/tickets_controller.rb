@@ -42,11 +42,27 @@ module Widget
 
     def close
       @ticket = Ticket.find(params[:id])
-      @ticket.update!(status: "resolved")
+      @ticket.update!(status: "resolved", human_handoff_available: false)
 
       respond_to do |format|
         format.turbo_stream { render :close, status: :ok }
         format.html { render :close, status: :ok }
+      end
+    end
+
+    def handoff
+      @ticket = Ticket.find(params[:id])
+      @ticket.update!(
+        status: "in_progress",
+        current_layer: "human",
+        manual_takeover: true,
+        processing: false,
+        human_handoff_available: false
+      )
+
+      respond_to do |format|
+        format.turbo_stream { render :handoff, status: :ok }
+        format.html { render :handoff, status: :ok }
       end
     end
 

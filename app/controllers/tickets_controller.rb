@@ -36,6 +36,7 @@ class TicketsController < ApplicationController
         status: "awaiting_customer",
         current_layer: "human",
         manual_takeover: true,
+        human_handoff_available: false,
         escalation_reason: nil,
         handoff_note: nil
       )

@@ -299,8 +299,9 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
 
     ticket.reload
 
-    assert_equal "escalated", ticket.status
-    assert_equal "human", ticket.current_layer
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "triage", ticket.current_layer
+    assert_equal true, ticket.human_handoff_available
     assert_equal "fallback", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
   end
 
@@ -340,9 +341,10 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
 
     ticket.reload
 
-    assert_equal "escalated", ticket.status
-    assert_equal "human", ticket.current_layer
-    assert_equal 2, ticket.agent_runs.count
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "triage", ticket.current_layer
+    assert_equal false, ticket.human_handoff_available
+    assert_equal 1, ticket.agent_runs.count
     refute_equal "public_knowledge", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
   end
 
@@ -382,8 +384,9 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
 
     ticket.reload
 
-    assert_equal "escalated", ticket.status
-    assert_equal "human", ticket.current_layer
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "triage", ticket.current_layer
+    assert_equal false, ticket.human_handoff_available
     refute_equal "public_knowledge", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
   end
 

@@ -81,6 +81,11 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, "Start support conversation"
     assert_includes response.body, %(data-widget-shell-email="")
+    assert_includes response.body, %(class="min-h-screen bg-white")
+    assert_includes response.body, %(class="mx-auto flex min-h-screen w-full max-w-md flex-col")
+    assert_select "[data-controller='widget-shell']"
+    assert_select "[data-widget-shell-target='panel']"
+    assert_select "[data-widget-shell-target='openButton']", count: 0
     assert_select "select[name='ticket[company_id]']"
     assert_select "input[name='ticket[email]']"
     assert_select "textarea[name='ticket[content]'][data-action='keydown->enter-submit#submitOnEnter']"
@@ -97,7 +102,8 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     get new_widget_ticket_path(company_id: company.id)
 
     assert_response :success
-    assert_includes response.body, "flex min-h-0 flex-1 flex-col overflow-y-auto p-5"
+    assert_select "[data-controller='widget-shell']"
+    assert_select "[data-widget-shell-target='openButton']", count: 0
     assert_includes response.body, "Example scenarios"
   end
 
@@ -287,6 +293,9 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_includes html, "A human specialist is now reviewing your ticket"
     assert_includes html, "You can leave this page safely"
     assert_not_includes html, "Example scenarios"
+    assert_operator html.index("Escalated for human review because the customer reports an embassy rejection dispute."),
+                    :<,
+                    html.index("Waiting On Human Specialist")
   end
 
   test "rendered chat wires transcript auto-scroll behavior" do
@@ -619,6 +628,80 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, "Waiting on support"
+  end
+
+  test "widget shows manual handoff button when automation offers human help" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "anna@example.com")
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "awaiting_customer",
+      category: "refund",
+      priority: "high",
+      channel: "widget",
+      current_layer: "triage",
+      processing: false,
+      human_handoff_available: true,
+      summary: "Refund dispute needs a human specialist.",
+      escalation_reason: "Embassy rejection disputes require human review.",
+      handoff_note: "A human specialist can take over this ticket if the customer asks."
+    )
+    ticket.messages.create!(role: "user", content: "My photo was rejected by the embassy.")
+    ticket.messages.create!(role: "assistant", content: "This case needs human review. Use the button below if you want a human specialist.")
+
+    get ticket_path(ticket)
+
+    assert_response :success
+    assert_includes response.body, "Refund dispute needs a human specialist."
+
+    html = ApplicationController.render(
+      partial: "widget/tickets/chat",
+      locals: { ticket: ticket }
+    )
+
+    assert_includes html, "Chat to human"
+    assert_not_includes html, "Waiting On Human Specialist"
+  end
+
+  test "clicking the widget handoff button makes the ticket human owned" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "anna@example.com")
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "awaiting_customer",
+      category: "refund",
+      priority: "high",
+      channel: "widget",
+      current_layer: "triage",
+      processing: false,
+      human_handoff_available: true,
+      summary: "Refund dispute needs a human specialist.",
+      escalation_reason: "Embassy rejection disputes require human review.",
+      handoff_note: "A human specialist can take over this ticket if the customer asks."
+    )
+    ticket.messages.create!(role: "user", content: "My photo was rejected by the embassy.")
+    ticket.messages.create!(role: "assistant", content: "This case needs human review. Use the button below if you want a human specialist.")
+
+    patch handoff_widget_ticket_path(ticket), headers: { "Accept" => "text/vnd.turbo-stream.html" }
+
+    assert_response :success
+
+    ticket.reload
+    assert_equal true, ticket.manual_takeover
+    assert_equal false, ticket.human_handoff_available
+    assert_equal "human", ticket.current_layer
+    assert_equal "in_progress", ticket.status
+    assert_includes response.body, "Waiting On Human Specialist"
   end
 
   test "tickets index supports filtering, counts, and pagination" do

@@ -39,19 +39,24 @@ class SupportRuleMatcher
   end
 
   def build_attributes(rule)
+    handoff_offer = rule.route == "escalate"
+
     {
       source: "support_rule",
       matched_rule_id: rule.id,
       matched_rule_name: rule.name,
-      status: rule.route == "escalate" ? "escalated" : "in_progress",
+      status: handoff_offer ? "awaiting_customer" : "in_progress",
       category: rule.category,
       priority: rule.priority_level,
-      route: rule.route,
-      current_layer: rule.route == "escalate" ? "human" : "specialist",
+      route: handoff_offer ? "offer_human_handoff" : rule.route,
+      current_layer: handoff_offer ? "triage" : "specialist",
       confidence: rule.confidence.to_f,
-      decision: rule.route == "escalate" ? "escalate" : "triage",
+      decision: handoff_offer ? "offer_human_handoff" : "triage",
       escalation_reason: rule.escalation_reason,
       handoff_note: rule.handoff_note,
+      summary: rule.reasoning_summary,
+      reply: handoff_offer ? "This case needs human review. Use the button below if you want a human specialist to take over." : nil,
+      human_handoff_available: handoff_offer,
       reasoning_summary: rule.reasoning_summary,
       tags: [ rule.category, rule.name ]
     }

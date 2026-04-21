@@ -28,11 +28,14 @@ class SupportPipeline
       category: triage_result.fetch(:category),
       priority: triage_result.fetch(:priority),
       current_layer: triage_result.fetch(:current_layer),
-      last_confidence: triage_result.fetch(:confidence)
+      last_confidence: triage_result.fetch(:confidence),
+      summary: triage_result[:summary],
+      escalation_reason: triage_result[:escalation_reason],
+      handoff_note: triage_result[:handoff_note],
+      human_handoff_available: triage_result[:human_handoff_available] || false
     )
 
-    return escalate!(triage_result) if triage_result[:route] == "escalate"
-    return create_knowledge_answer!(triage_result) if triage_result[:route] == "knowledge_answer"
+    return create_triage_reply!(triage_result) if %w[knowledge_answer clarify offer_human_handoff].include?(triage_result[:route])
 
     specialist_result = apply_specialist_guardrails(
       Agents::SpecialistAgent.new(ticket: @ticket, triage_result: triage_result, llm_client: @llm_client).call,
@@ -45,10 +48,11 @@ class SupportPipeline
     @ticket.update!(
       status: specialist_result.fetch(:status),
       current_layer: specialist_result.fetch(:current_layer),
-      summary: specialist_result[:reasoning_summary],
+      summary: specialist_result[:summary],
       escalation_reason: specialist_result[:escalation_reason],
       handoff_note: specialist_result[:handoff_note],
-      last_confidence: specialist_result.fetch(:confidence)
+      last_confidence: specialist_result.fetch(:confidence),
+      human_handoff_available: specialist_result[:human_handoff_available] || false
     )
 
     create_outbound_message!(specialist_result)
@@ -58,73 +62,54 @@ class SupportPipeline
 
   private
 
-  def escalate!(triage_result)
-    @ticket.update!(
-      escalation_reason: triage_result[:escalation_reason],
-      handoff_note: triage_result[:handoff_note]
-    )
-
-    Rails.logger.info(
-      "[SupportPipeline] HumanHandoff source=#{triage_result[:source]} status=#{triage_result[:status]} " \
-      "reason=#{triage_result[:escalation_reason]}"
-    )
-
-    @ticket.agent_runs.create!(
-      agent_name: "HumanHandoff",
-      status: "completed",
-      decision: "handoff",
-      confidence: triage_result[:confidence],
-      input_snapshot: triage_result[:input_snapshot],
-      output_snapshot: triage_result.to_json,
-      reasoning_summary: "#{triage_result[:handoff_note]} (source: #{triage_result[:source]})"
-    )
-
-    @ticket.messages.create!(role: "human", content: triage_result[:handoff_note])
-    triage_result
-  end
-
   def create_outbound_message!(specialist_result)
-    role = specialist_result[:status] == "escalated" ? "human" : "assistant"
     content = specialist_result[:reply].presence || specialist_result[:handoff_note]
-
-    @ticket.messages.create!(role: role, content: content)
+    @ticket.messages.create!(role: "assistant", content: content)
   end
 
-  def create_knowledge_answer!(triage_result)
+  def create_triage_reply!(triage_result)
     assign_tags!(triage_result)
     @ticket.messages.create!(role: "assistant", content: triage_result.fetch(:reply))
     triage_result
   end
 
   def apply_triage_guardrails(result)
-    return result if result[:route] == "escalate"
+    return result if result[:route] == "offer_human_handoff"
+    return result if result[:route] == "clarify"
     return result if result.fetch(:confidence) >= TRIAGE_CONFIDENCE_THRESHOLD
 
-    guardrail_escalation_result(
+    guardrail_handoff_result(
       result,
       threshold: TRIAGE_CONFIDENCE_THRESHOLD,
-      handoff_note: "Escalated for human review because triage confidence was below the automation threshold."
+      reply: "I’m not confident enough to handle this automatically. If you want, I can connect you with a human specialist.",
+      handoff_note: "A human specialist should review this case because triage confidence was below the automation threshold and this needs human review.",
+      current_layer: "triage"
     )
   end
 
   def apply_specialist_guardrails(result, category:, priority:)
-    return result if result[:status] == "escalated"
-    return result.fetch(:confidence) >= SPECIALIST_CONFIDENCE_THRESHOLD ? result : guardrail_escalation_result(
+    return result if result[:route] == "offer_human_handoff"
+    return result.fetch(:confidence) >= SPECIALIST_CONFIDENCE_THRESHOLD ? result : guardrail_handoff_result(
       result.merge(category: category, priority: priority),
       threshold: SPECIALIST_CONFIDENCE_THRESHOLD,
-      handoff_note: "Escalated for human review because specialist confidence was below the automation threshold."
+      reply: "I’m not confident enough to complete this safely. If you want, I can connect you with a human specialist.",
+      handoff_note: "A human specialist should review this case because specialist confidence was below the automation threshold and this needs human review.",
+      current_layer: result[:current_layer].presence || "specialist"
     )
   end
 
-  def guardrail_escalation_result(result, threshold:, handoff_note:)
+  def guardrail_handoff_result(result, threshold:, handoff_note:, reply:, current_layer:)
     result.merge(
-      status: "escalated",
-      route: "escalate",
-      current_layer: "human",
-      decision: "escalate",
+      status: "awaiting_customer",
+      route: "offer_human_handoff",
+      current_layer: current_layer,
+      decision: "offer_human_handoff",
+      reply: reply,
+      summary: "Automation confidence #{result.fetch(:confidence)} was below the required threshold of #{threshold}.",
       escalation_reason: "Automation confidence #{result.fetch(:confidence)} was below the required threshold of #{threshold}.",
       handoff_note: handoff_note,
-      reasoning_summary: "#{result[:reasoning_summary]} Escalated by pipeline confidence guardrail."
+      reasoning_summary: "#{result[:reasoning_summary]} Human handoff was offered by the pipeline confidence guardrail.",
+      human_handoff_available: true
     )
   end
 
