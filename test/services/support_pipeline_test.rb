@@ -754,6 +754,49 @@ class SupportPipelineTest < ActiveSupport::TestCase
     refute_equal "public_knowledge", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
   end
 
+  test "llm triage downgrades unsolicited human handoff decisions to clarification" do
+    ticket = @company.tickets.create!(
+      customer: @customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "What payment systems u support?")
+    ticket.messages.create!(role: "assistant", content: "We process all payments securely through Stripe.")
+    ticket.messages.create!(role: "user", content: "Ok how much is the fish")
+    ticket.messages.create!(role: "assistant", content: "Could you please clarify your question so I can assist you better?")
+    ticket.messages.create!(role: "user", content: "I need some fish")
+
+    llm_client = FakeLlmClient.new(
+      {
+        needs_human_handoff: false,
+        confidence: 0.96,
+        reasoning_summary: "The customer is not explicitly asking for a human handoff."
+      },
+      {
+        category: "other",
+        priority: "low",
+        route: "offer_human_handoff",
+        confidence: 0.66,
+        needs_human_now: true,
+        reply: "This request needs specialist review. If you want, I can connect you with a human specialist.",
+        reasoning_summary: "The request looks unrelated to the supported business domain.",
+        tags: [ "off-topic" ]
+      }
+    )
+
+    SupportPipeline.new(ticket: ticket, llm_client: llm_client).call
+
+    ticket.reload
+
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "triage", ticket.current_layer
+    assert_equal false, ticket.manual_takeover
+    assert_equal false, ticket.human_handoff_available
+    assert_equal "assistant", ticket.messages.order(:created_at).last.role
+    assert_includes ticket.messages.order(:created_at).last.content, "What do you need help with today?"
+  end
+
   class FakeLlmClient
     attr_reader :calls
 

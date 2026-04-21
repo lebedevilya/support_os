@@ -187,17 +187,16 @@ module Agents
           Return keys:
           - category: one of billing, delivery, refund, policy, account, technical, other
           - priority: one of low, normal, high
-          - route: clarify, knowledge_answer, specialist, or offer_human_handoff
+          - route: clarify, knowledge_answer, or specialist
           - confidence: decimal between 0 and 1
-          - needs_human_now: boolean
-          - reply: optional string when route is clarify or knowledge_answer or offer_human_handoff
+          - reply: optional string when route is clarify or knowledge_answer
           - reasoning_summary: short sentence
           - tags: array of strings
           Rules:
           - greetings, vague openers, or low-information messages should use clarify with a short company-specific follow-up question
           - off-topic chatter should use clarify with a brief redirect back to company support
-          - requests that need human involvement should use offer_human_handoff, not escalate automatically
-          - if the request mentions embassy rejection, government rejection, or a disputed refund, route to offer_human_handoff
+          - do not offer human handoff from this step; explicit human requests are handled separately before triage
+          - if the request mentions embassy rejection, government rejection, or a disputed refund, keep the reply neutral and route as specialist only when the message is otherwise actionable
         PROMPT
         context: {
           company: @ticket.company.name,
@@ -215,9 +214,9 @@ module Agents
     def build_llm_result(response)
       route = normalized_route(response)
 
+      return clarify_result(response, fallback_reply: default_clarify_result[:reply], force_fallback_reply: true) if unsolicited_handoff_response?(response)
       return clarify_result(response) if route == "clarify"
       return knowledge_answer_result(response) if route == "knowledge_answer"
-      return handoff_offer_result(response) if route == "offer_human_handoff"
 
       {
         source: "llm",
@@ -284,17 +283,24 @@ module Agents
     end
 
     def normalized_route(response)
-      return "offer_human_handoff" if response[:needs_human_now]
+      return "clarify" if response[:needs_human_now]
 
       candidate = response[:route].to_s
       return "clarify" if candidate == "clarify"
       return "knowledge_answer" if candidate == "knowledge_answer"
-      return "offer_human_handoff" if %w[offer_human_handoff escalate].include?(candidate)
+      return "clarify" if %w[offer_human_handoff escalate].include?(candidate)
 
       "specialist"
     end
 
-    def clarify_result(response)
+    def clarify_result(response, fallback_reply: nil, force_fallback_reply: false)
+      reply =
+        if force_fallback_reply
+          fallback_reply || default_clarify_result[:reply]
+        else
+          response[:reply].presence || fallback_reply || default_clarify_result[:reply]
+        end
+
       {
         source: "llm",
         status: "awaiting_customer",
@@ -304,11 +310,15 @@ module Agents
         current_layer: "triage",
         confidence: numeric_confidence(response[:confidence]),
         decision: "clarify",
-        reply: response[:reply].presence || default_clarify_result[:reply],
+        reply: reply,
         reasoning_summary: response[:reasoning_summary].presence || "The customer needs to clarify the support request.",
         input_snapshot: latest_message.content,
         tags: normalized_tags(response[:tags], fallback_tags: %w[clarify])
       }
+    end
+
+    def unsolicited_handoff_response?(response)
+      response[:needs_human_now] || %w[offer_human_handoff escalate].include?(response[:route].to_s)
     end
 
     def knowledge_answer_result(response)
@@ -326,23 +336,6 @@ module Agents
         input_snapshot: latest_message.content,
         tags: normalized_tags(response[:tags], fallback_tags: triage_tags(response, "knowledge_answer"))
       }
-    end
-
-    def handoff_offer_result(response)
-      human_handoff_offer_result(
-        source: "llm",
-        category: normalized_category(response[:category]),
-        priority: normalized_priority(response[:priority]),
-        current_layer: "triage",
-        confidence: numeric_confidence(response[:confidence]),
-        escalation_reason: "The request requires human review.",
-        handoff_note: "A human specialist should review this case before the next reply.",
-        summary: response[:reasoning_summary].presence || "Triage determined the request should be reviewed by a human specialist.",
-        reply: response[:reply].presence || "This case needs human review. Use the button below if you want a human specialist to take over.",
-        reasoning_summary: response[:reasoning_summary].presence || "Triage offered a human handoff.",
-        input_snapshot: latest_message.content,
-        tags: normalized_tags(response[:tags], fallback_tags: triage_tags(response, "offer_human_handoff"))
-      )
     end
 
     def human_handoff_offer_result(source:, category:, priority:, current_layer:, confidence:, escalation_reason:, handoff_note:, summary:, reply:, reasoning_summary:, input_snapshot:, tags:)
