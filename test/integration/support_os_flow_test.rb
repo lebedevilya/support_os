@@ -83,7 +83,7 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Start support conversation"
     assert_includes response.body, %(data-widget-shell-email="")
     assert_includes response.body, %(class="min-h-screen bg-white")
-    assert_includes response.body, %(class="mx-auto flex min-h-screen w-full max-w-md flex-col")
+    assert_includes response.body, %(class="mx-auto flex min-h-screen w-full max-w-md flex-col md:w-[36rem] md:max-w-none")
     assert_select "[data-controller='widget-shell']"
     assert_select "[data-widget-shell-target='panel']"
     assert_select "[data-widget-shell-target='openButton']", count: 0
