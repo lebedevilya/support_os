@@ -234,6 +234,52 @@ class SupportPipelineTest < ActiveSupport::TestCase
     assert_includes reply.downcase, "delivery status"
   end
 
+  test "routes the photo request status showcase prompt to the delivery specialist" do
+    SupportRule.create!(
+      company: @company,
+      name: "Photo request status questions",
+      active: true,
+      priority: 19,
+      match_type: "all_terms",
+      terms: "status\nphoto request",
+      route: "specialist",
+      category: "delivery",
+      priority_level: "normal",
+      confidence: 0.86,
+      reasoning_summary: "Photo request status questions should go to the delivery specialist."
+    )
+
+    BusinessRecord.create!(
+      company: @company,
+      record_type: "photo_request",
+      external_id: "APP-1001",
+      customer_email: "anna@example.com",
+      status: "completed",
+      payload: {
+        asset_delivery: "sent",
+        download_url: "https://example.test/download/APP-1001"
+      }
+    )
+
+    ticket = @company.tickets.create!(
+      customer: @customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "What is the status of my photo request?")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    ticket.reload
+
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "delivery", ticket.category
+    assert_equal [ "TriageAgent", "SpecialistAgent" ], ticket.agent_runs.order(:created_at).pluck(:agent_name)
+    assert_equal [ "lookup_photo_request" ], ticket.tool_calls.order(:created_at).pluck(:tool_name)
+    assert_includes ticket.messages.order(:created_at).last.content.downcase, "delivery status"
+  end
+
   test "specialist can resend a download link through explicit tool calls" do
     SupportRule.create!(
       company: @company,

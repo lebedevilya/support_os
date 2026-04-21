@@ -312,6 +312,65 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     assert_equal "fallback", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
   end
 
+  test "general payment faq can still answer from public knowledge when the blocker only covers operational billing cases" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    SupportRule.create!(
+      company: company,
+      name: "Operational billing requests should not use public knowledge",
+      active: true,
+      priority: 10,
+      match_type: "any_terms",
+      terms: "paid\nrefund\ninvoice\nreceipt",
+      route: "specialist",
+      category: "other",
+      priority_level: "normal",
+      confidence: 0.9,
+      reasoning_summary: "Operational billing questions should not be answered from public knowledge.",
+      blocks_public_knowledge: true
+    )
+
+    source = Knowledge::Source.create!(
+      company: company,
+      url: "https://www.aipassportphoto.co/pricing",
+      title: "Pricing",
+      source_kind: "website_page",
+      status: "imported",
+      extracted_text: "We support card payments through Visa, Mastercard, American Express, Apple Pay, and Google Pay."
+    )
+    source.chunks.create!(
+      company: company,
+      content: "We support card payments through Visa, Mastercard, American Express, Apple Pay, and Google Pay.",
+      position: 0,
+      token_estimate: 18
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "What payment systems u support?")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    ticket.reload
+
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "triage", ticket.current_layer
+    assert_equal false, ticket.human_handoff_available
+    assert_equal "assistant", ticket.messages.order(:created_at).last.role
+    assert_includes ticket.messages.order(:created_at).last.content, "Visa"
+    assert_equal "public_knowledge", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
+  end
+
   test "does not answer from public knowledge on a weak incidental match" do
     company = Company.create!(
       name: "AI Passport Photo",

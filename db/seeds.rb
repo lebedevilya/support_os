@@ -69,6 +69,19 @@ nodes_garden = Company.create!(
     reasoning_summary: "Download-link resend requests should go to the delivery specialist."
   },
   {
+    company: aipassportphoto,
+    name: "Photo request status questions",
+    active: true,
+    priority: 19,
+    match_type: "all_terms",
+    terms: "status\nphoto request",
+    route: "specialist",
+    category: "delivery",
+    priority_level: "normal",
+    confidence: 0.86,
+    reasoning_summary: "Photo request status questions should go to the delivery specialist."
+  },
+  {
     company: nodes_garden,
     name: "Provisioning status questions",
     active: true,
@@ -93,34 +106,6 @@ nodes_garden = Company.create!(
     priority_level: "high",
     confidence: 0.9,
     reasoning_summary: "Explicit reboot requests should go to the technical specialist."
-  },
-  {
-    company: aipassportphoto,
-    name: "Operational and billing requests should not use public knowledge",
-    active: true,
-    priority: 90,
-    match_type: "any_terms",
-    terms: "paid\npayment\nrefund\nrejected\ndid not receive\ndidn't receive\ndownload link\nmy file\nmy order\nused the wrong email\nwrong email\ninvoice\nreceipt",
-    route: "specialist",
-    category: "other",
-    priority_level: "normal",
-    confidence: 0.9,
-    reasoning_summary: "Operational and billing issues should not be answered from public knowledge.",
-    blocks_public_knowledge: true
-  },
-  {
-    company: nodes_garden,
-    name: "Operational provisioning requests should not use public knowledge",
-    active: true,
-    priority: 90,
-    match_type: "any_terms",
-    terms: "my node\nprovisioning\nnode status\ninvoice\nreceipt",
-    route: "specialist",
-    category: "other",
-    priority_level: "normal",
-    confidence: 0.9,
-    reasoning_summary: "Provisioning and operational node issues should not be answered from public knowledge.",
-    blocks_public_knowledge: true
   }
 ].each do |attributes|
   SupportRule.create!(attributes)
