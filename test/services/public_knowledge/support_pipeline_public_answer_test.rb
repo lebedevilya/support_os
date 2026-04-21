@@ -132,6 +132,76 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     refute_match(/\AWe support passport and visa photo requirements/m, reply)
   end
 
+  test "grounds office location questions in retrieved public knowledge instead of llm fabrication" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    source = Knowledge::Source.create!(
+      company: company,
+      url: "https://www.aipassportphoto.co/contact",
+      title: "Contact",
+      source_kind: "website_page",
+      status: "imported",
+      extracted_text: "Registered Address Picanha L.L.C-FZ United Arab Emirates."
+    )
+    source.chunks.create!(
+      company: company,
+      content: "Registered Address Picanha L.L.C-FZ United Arab Emirates.",
+      position: 0,
+      token_estimate: 8
+    )
+    distracting_terms_source = Knowledge::Source.create!(
+      company: company,
+      url: "https://www.aipassportphoto.co/terms",
+      title: "Terms",
+      source_kind: "website_page",
+      status: "imported",
+      extracted_text: "Picanha L.L.C-FZ is registered in the United Arab Emirates and users must provide a valid email address."
+    )
+    distracting_terms_source.chunks.create!(
+      company: company,
+      content: "Picanha L.L.C-FZ is registered in the United Arab Emirates and users must provide a valid email address.",
+      position: 0,
+      token_estimate: 15
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "I want to know location of your office")
+
+    llm_client = FakeKnowledgeLlmClient.new(
+      {
+        needs_human_handoff: false,
+        confidence: 0.94,
+        reasoning_summary: "The customer is not explicitly asking for a human handoff."
+      },
+      {
+        reply: "We don’t have the office location publicly listed. Please contact support@aipassportphoto.co for help.",
+        confidence: 0.9,
+        reasoning_summary: "Answered from the contact page.",
+        cited_source_url: nil
+      }
+    )
+
+    SupportPipeline.new(ticket: ticket, llm_client: llm_client).call
+
+    reply = ticket.reload.messages.order(:created_at).last.content
+
+    assert_includes reply, "Picanha"
+    assert_includes reply, "United Arab Emirates"
+    refute_includes reply, "Imaginetown"
+    refute_includes reply, "123 Photo Blvd"
+  end
+
   test "does not append a source link when the llm does not provide a directly supporting source" do
     company = Company.create!(
       name: "AI Passport Photo",

@@ -80,6 +80,7 @@ module ApplicationHelper
       [
         { prompt: "Can I make a picture for UK visa?", email: "review@example.com" },
         { prompt: "How long does it take?", email: "timing@example.com" },
+        { prompt: "Where is your office located?", email: "office@example.com" },
         { prompt: "What is the status of my photo request?", email: "anna@example.com" },
         { prompt: "I did not receive my file, resend the download link", email: "sara@example.com" },
         { prompt: "My photo was rejected by the embassy and I want a refund right now", email: "refund@example.com" }

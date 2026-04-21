@@ -1,6 +1,14 @@
 module Agents
   class TriageAgent
     KNOWLEDGE_MIN_SCORE = 2
+    STRONG_KNOWLEDGE_MATCH_SCORE = 4
+    GROUNDED_REPLY_UNSUPPORTED_RATIO = 0.35
+    GROUNDED_REPLY_MIN_UNSUPPORTED_TOKENS = 3
+    GROUNDING_STOPWORDS = %w[
+      a an and are at but by can details for from help here how i if in is it its know
+      located me my of on or our please the their they this to us want what where with
+      you your
+    ].freeze
 
     def initialize(ticket:, llm_client: nil)
       @ticket = ticket
@@ -109,6 +117,7 @@ module Agents
           - never cite a generic, unrelated, or fallback page just to add a link
           - do not invent policies, tools, account data, or operational actions
           - do not claim uncertainty if the provided knowledge is sufficient
+          - if you cite a source, factual details in the reply must be grounded in the provided chunks
         PROMPT
         context: {
           company: @ticket.company.name,
@@ -125,6 +134,8 @@ module Agents
           end
         }
       )
+
+      return fallback_knowledge_answer(matches.first.chunk) if unsupported_knowledge_reply?(response, matches)
 
       {
         source: "public_knowledge_llm",
@@ -177,6 +188,32 @@ module Agents
 
       allowed_urls = matches.filter_map { |match| match.chunk.source&.url.presence }.uniq
       allowed_urls.include?(candidate) ? candidate : nil
+    end
+
+    def unsupported_knowledge_reply?(response, matches)
+      return false if matches.first.score < STRONG_KNOWLEDGE_MATCH_SCORE
+
+      reply_tokens = grounding_tokens(response[:reply])
+      return false if reply_tokens.empty?
+
+      supported_tokens = grounding_tokens(latest_message.content)
+      matches.each do |match|
+        supported_tokens.merge(grounding_tokens(match.chunk.content))
+      end
+
+      unsupported_tokens = reply_tokens - supported_tokens
+      return false if unsupported_tokens.size < GROUNDED_REPLY_MIN_UNSUPPORTED_TOKENS
+
+      unsupported_tokens.size.to_f / reply_tokens.size > GROUNDED_REPLY_UNSUPPORTED_RATIO
+    end
+
+    def grounding_tokens(text)
+      text.to_s.downcase.scan(/[a-z0-9-]+/).filter_map do |token|
+        next if token.length < 4 && token !~ /\A\d+\z/
+        next if GROUNDING_STOPWORDS.include?(token)
+
+        token
+      end.to_set
     end
 
     def llm_triage

@@ -51,6 +51,7 @@ class SupportOsFlowTest < ActionDispatch::IntegrationTest
     assert_select "[data-widget-shell-target='customerEmail']"
     assert_includes response.body, "Example scenarios"
     assert_includes response.body, "Can I make a picture for UK visa?"
+    assert_includes response.body, "Where is your office located?"
     assert_select "button[data-scenario-prompt='I did not receive my file, resend the download link']"
     assert_select "button[data-scenario-email='sara@example.com']"
   end
