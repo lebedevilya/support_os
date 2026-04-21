@@ -1,12 +1,5 @@
 module Agents
   class TriageAgent
-    GREETING_PATTERNS = [
-      /\A(?:hi|hello|hey|hey there|yo|good morning|good afternoon|good evening)[.!? ]*\z/i,
-      /\A(?:can you help\??|help\??)\z/i
-    ].freeze
-    OFF_TOPIC_PATTERNS = [
-      /weather/i
-    ].freeze
     KNOWLEDGE_MIN_SCORE = 2
 
     def initialize(ticket:, llm_client: nil)
@@ -26,9 +19,6 @@ module Agents
 
       blocker_fallback = blocked_request_handoff_result
       return blocker_fallback if blocker_fallback
-
-      conversational_fallback = fallback_conversation_result
-      return conversational_fallback if conversational_fallback
 
       return llm_triage if @llm_client
 
@@ -123,6 +113,7 @@ module Agents
         context: {
           company: @ticket.company.name,
           latest_message: latest_message.content,
+          message_history: message_history,
           knowledge_chunks: matches.map do |match|
             {
               content: match.chunk.content,
@@ -248,6 +239,10 @@ module Agents
       @ticket.messages.order(:created_at).last
     end
 
+    def message_history
+      @ticket.messages.order(:created_at).pluck(:role, :content)
+    end
+
     def public_knowledge_blocked_by_rule?
       SupportRuleMatcher.new(company: @ticket.company, content: latest_message.content, blocker_only: true).call.present?
     end
@@ -271,21 +266,6 @@ module Agents
       )
     end
 
-    def fallback_conversation_result
-      return default_clarify_result if greeting_message?
-      return off_topic_redirect_result if off_topic_message?
-
-      nil
-    end
-
-    def greeting_message?
-      GREETING_PATTERNS.any? { |pattern| latest_message.content.to_s.match?(pattern) }
-    end
-
-    def off_topic_message?
-      OFF_TOPIC_PATTERNS.any? { |pattern| latest_message.content.to_s.match?(pattern) }
-    end
-
     def default_clarify_result(source: "fallback", confidence: 0.9, reasoning_summary: "The message is too vague to route yet.")
       {
         source: source,
@@ -300,23 +280,6 @@ module Agents
         reasoning_summary: reasoning_summary,
         input_snapshot: latest_message.content,
         tags: %w[clarify greeting]
-      }
-    end
-
-    def off_topic_redirect_result
-      {
-        source: "fallback",
-        status: "awaiting_customer",
-        category: "other",
-        priority: "low",
-        route: "clarify",
-        current_layer: "triage",
-        confidence: 0.92,
-        decision: "clarify",
-        reply: "I’m here to help with #{@ticket.company.name} support. Tell me what you need help with and I’ll take it from there.",
-        reasoning_summary: "The message is off-topic, so triage redirected the customer back to product support.",
-        input_snapshot: latest_message.content,
-        tags: %w[clarify off-topic]
       }
     end
 

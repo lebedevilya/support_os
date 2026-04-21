@@ -31,6 +31,8 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
       channel: "widget",
       current_layer: "triage"
     )
+    ticket.messages.create!(role: "user", content: "Hi")
+    ticket.messages.create!(role: "assistant", content: "Hello! What do you need help with?")
     ticket.messages.create!(role: "user", content: "How long does it take?")
 
     llm_client = FakeKnowledgeLlmClient.new(
@@ -54,7 +56,7 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     assert_equal "awaiting_customer", ticket.status
     assert_equal "triage", ticket.current_layer
     assert_equal 1, ticket.agent_runs.count
-    assert_equal [ "user", "assistant" ], ticket.messages.order(:created_at).pluck(:role)
+    assert_equal [ "user", "assistant", "user", "assistant" ], ticket.messages.order(:created_at).pluck(:role)
     reply = ticket.messages.order(:created_at).last.content
     assert_includes reply, "60 seconds"
     assert_includes reply, "Source:"
@@ -63,6 +65,11 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     assert_equal [ "human_handoff_intent", "knowledge_answer" ], llm_client.calls.map { |call| call[:task] }
     knowledge_call = llm_client.calls.find { |call| call[:task] == "knowledge_answer" }
     assert_includes knowledge_call[:context][:knowledge_chunks].first[:content], "Under 60 seconds"
+    assert_equal [
+      [ "user", "Hi" ],
+      [ "assistant", "Hello! What do you need help with?" ],
+      [ "user", "How long does it take?" ]
+    ], knowledge_call[:context][:message_history]
     assert_includes knowledge_call[:prompt], "do not include URLs or citation text directly in reply"
     assert_includes knowledge_call[:prompt], "set cited_source_url only when one provided source page directly supports the answer"
   end

@@ -155,6 +155,10 @@ module Agents
       @ticket.messages.order(:created_at).last
     end
 
+    def message_history
+      @ticket.messages.order(:created_at).pluck(:role, :content)
+    end
+
     def create_tool_call!(tool_name:, input_payload:, output_payload:)
       @ticket.tool_calls.create!(
         tool_name: tool_name,
@@ -183,6 +187,7 @@ module Agents
           company: @ticket.company.name,
           category: @triage_result[:category],
           latest_message: latest_message.content,
+          message_history: message_history,
           knowledge_articles: [ { title: article.title, content: article.content } ],
           tool_results: []
         }
@@ -201,6 +206,7 @@ module Agents
           company: @ticket.company.name,
           category: @triage_result[:category],
           latest_message: latest_message.content,
+          message_history: message_history,
           knowledge_articles: related_articles,
           tool_results: tool_results,
           business_record: {
@@ -224,6 +230,7 @@ module Agents
           company: @ticket.company.name,
           category: @triage_result[:category],
           latest_message: latest_message.content,
+          message_history: message_history,
           knowledge_articles: related_articles,
           tool_results: tool_results,
           business_record: {
@@ -352,6 +359,7 @@ module Agents
           company: @ticket.company.name,
           category: category,
           latest_message: latest_message.content,
+          message_history: message_history,
           business_record: {
             external_id: record.external_id,
             status: record.status,
