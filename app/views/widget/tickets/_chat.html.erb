@@ -40,9 +40,6 @@
           data: { turbo_frame: "support_widget" } %>
     </div>
   <% elsif ticket.processing? %>
-    <div class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-      Your message was submitted. The assistant reply will appear here automatically.
-    </div>
   <% else %>
     <%= form_with url: widget_ticket_messages_path(ticket), scope: :message, class: "mt-4 space-y-3", data: { controller: "scenario-play", scenario_play_target: "form" } do |form| %>
       <div class="flex items-end gap-3">
