@@ -151,6 +151,9 @@ module Agents
           - do not invent policies, tools, account data, or operational actions
           - do not claim uncertainty if the provided knowledge is sufficient
           - if you cite a source, factual details in the reply must be grounded in the provided chunks
+          - do not add any timelines, response times, contact addresses, email addresses, or procedural steps that are not explicitly stated word-for-word in the provided chunks
+          - if a policy exists but the chunks do not provide specific details such as numbers, timeframes, or contact info, state only what the chunks say and omit the missing specifics entirely
+          - if the provided chunks do not directly and sufficiently answer the customer's question, set reply to an empty string and set confidence below 0.3
         PROMPT
         context: {
           company: @ticket.company.name,
@@ -168,6 +171,7 @@ module Agents
         }
       )
 
+      return nil if response[:reply].to_s.strip.empty? && response[:confidence].to_f < 0.3
       return fallback_knowledge_answer(matches.first.chunk) if unsupported_knowledge_reply?(response, matches)
 
       {
@@ -290,8 +294,8 @@ module Agents
           - tags: array of strings
           Rules:
           - greetings, vague openers, or low-information messages should use clarify with a short company-specific follow-up question
-          - off-topic chatter should use clarify with a brief redirect back to company support
-          - unsupported operational requests should use clarify with a brief redirect back to company support
+          - off-topic chatter should use clarify with a reply that names the company by name and states what support topics it handles; do not respond like a generic assistant
+          - unsupported operational requests should use clarify with a reply that names the company by name and explains what it actually does
           - never act like a general assistant for poems, recipes, weather, shopping, or government processing tasks
           - never claim the company can renew passports, submit applications, or email photos directly to embassies unless the provided context explicitly says so
           - do not offer human handoff from this step; explicit human requests are handled separately before triage
@@ -319,7 +323,7 @@ module Agents
           - route: one of clarify, knowledge_answer, specialist
           - intent: one of opener, off_topic, knowledge_question, case_specific_request, operational_request, other
           - request_mode: one of informational, case_specific, action_request
-          - question_type: one of pricing, package, timing, guarantee, countries, camera, privacy, contact, payment, refund, account, technical, operational, off_topic, other
+          - question_type: one of pricing, package, timing, guarantee, countries, camera, privacy, contact, payment, refund, account, technical, operational, service_cannot_perform, off_topic, other
           - country: optional string
           - document_type: optional string
           - category: optional one of billing, delivery, refund, policy, account, technical, other
@@ -330,11 +334,12 @@ module Agents
           - tags: array of strings
           Rules:
           - greetings, vague openers, and low-information messages should route to clarify
-          - off-topic or general-assistant requests should route to clarify with a short redirect back to company support
+          - off-topic or general-assistant requests (cooking, weather, shopping, anything unrelated to passport or visa photos) should route to clarify; the reply must name the company by name and briefly describe what support it actually provides
           - broad product questions answerable from public website knowledge should route to knowledge_answer
-          - case-specific operational requests or requests the company cannot perform should route to specialist
+          - case-specific operational requests should route to specialist
+          - requests for services this company cannot perform — such as renewing passports, submitting visa or passport applications, delivering or emailing photos directly to embassies or government agencies, or any other government-process action — have question_type service_cannot_perform and route to clarify; the reply must name the company by name and explain that it provides AI photo preparation only, not government services
           - distinguish a general policy question about refunds or guarantees from an active customer dispute
-          - extract the country when the customer asks about a passport, visa, or photo format for a country
+          - extract the country into the country field when the customer asks about a passport, visa, or photo format for a specific country
           - do not offer human handoff in this step
         PROMPT
         context: {
@@ -628,13 +633,14 @@ module Agents
       extracted_country_name(intent_result).present?
     end
 
-    def supported_country_question?(intent_result = nil)
-      country_from(latest_message.content).present? || normalized_intent_country(intent_result).present?
+    def supported_country_question?(_intent_result = nil)
+      country_from(latest_message.content).present?
     end
 
     def extracted_country_name(intent_result = nil)
       intent_country = normalized_intent_country(intent_result)
       return intent_country if intent_country.present?
+      return nil if intent_result
 
       @extracted_country_name ||= begin
         text = latest_message.content.to_s.downcase
