@@ -19,5 +19,14 @@ Rails.application.routes.draw do
       end
       resources :messages, only: [ :create ]
     end
+
+    namespace :test_api do
+      resources :tickets, only: [ :create, :show ] do
+        member do
+          post :close
+          post :messages, action: :create_message
+        end
+      end
+    end
   end
 end
