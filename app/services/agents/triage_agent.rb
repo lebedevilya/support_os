@@ -4,6 +4,9 @@ module Agents
     STRONG_KNOWLEDGE_MATCH_SCORE = 4
     GROUNDED_REPLY_UNSUPPORTED_RATIO = 0.35
     GROUNDED_REPLY_MIN_UNSUPPORTED_TOKENS = 3
+    GENERIC_SUPPORT_OPENER_TOKENS = %w[
+      hello hi hey morning afternoon evening support help please can you thanks thank-you
+    ].freeze
     GROUNDING_STOPWORDS = %w[
       a an and are at but by can details for from help here how i if in is it its know
       located me my of on or our please the their they this to us want what where with
@@ -18,6 +21,8 @@ module Agents
     def call
       human_request_result = explicit_human_handoff_result
       return human_request_result if human_request_result
+
+      return default_clarify_result if generic_support_opener?
 
       rule_result = matched_support_rule_result
       return rule_result if rule_result
@@ -273,6 +278,14 @@ module Agents
 
     def latest_message
       @ticket.messages.order(:created_at).last
+    end
+
+    def generic_support_opener?
+      tokens = latest_message.content.to_s.downcase.scan(/[a-z]+(?:-[a-z]+)?/)
+      return false if tokens.empty?
+      return false if tokens.size > 5
+
+      tokens.all? { |token| GENERIC_SUPPORT_OPENER_TOKENS.include?(token) }
     end
 
     def message_history

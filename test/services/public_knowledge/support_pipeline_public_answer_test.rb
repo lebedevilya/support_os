@@ -561,6 +561,40 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     assert_includes ticket.messages.order(:created_at).last.content, "What do you need help with today?"
   end
 
+  test "does not answer a greeting plus generic support request from support-contact knowledge" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Support contact",
+      content: "Customers can contact AI Passport Photo support through the website contact page or by emailing help@aipassportphoto.co.",
+      status: "active"
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Hello, support?")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    ticket.reload
+
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "triage", ticket.current_layer
+    refute_equal "public_knowledge", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
+    assert_includes ticket.messages.order(:created_at).last.content, "What do you need help with today?"
+  end
+
   test "does not answer a pricing question from incidental terms-of-service text" do
     company = Company.create!(
       name: "AI Passport Photo",

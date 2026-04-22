@@ -167,6 +167,21 @@ end
 [
   {
     company: aipassportphoto,
+    title: "Pricing",
+    content: "AI Passport Photo offers a $4.99 Image Only option and a $7.99 Image + Print PDF option."
+  },
+  {
+    company: aipassportphoto,
+    title: "Image Only package",
+    content: "The $4.99 Image Only option includes a high-resolution digital image, 300 DPI quality, and a file ready for upload."
+  },
+  {
+    company: aipassportphoto,
+    title: "Image plus Print PDF package",
+    content: "The $7.99 Image + Print PDF option includes a high-resolution digital image, 300 DPI quality, and a print-ready PDF with 4 photos and cutting guides."
+  },
+  {
+    company: aipassportphoto,
     title: "Turnaround time",
     content: "Most passport photo requests are completed in under 60 seconds. In heavier traffic, delivery can take up to 2 minutes."
   },
@@ -177,8 +192,48 @@ end
   },
   {
     company: aipassportphoto,
+    title: "Acceptance and compliance",
+    content: "AI Passport Photo says its photos meet ICAO 9303 specifications, U.S. Department of State requirements, UK HMPO specifications, and ISO/IEC 19794-5 formatting. The site also says photos are accepted at USPS, DMV, and embassies."
+  },
+  {
+    company: aipassportphoto,
+    title: "Camera and lighting",
+    content: "Customers do not need a professional camera or special lighting. The site says any selfie works and can be taken from a phone or computer."
+  },
+  {
+    company: aipassportphoto,
+    title: "Phone upload and printing",
+    content: "Customers can upload a selfie from a phone or computer. AI Passport Photo provides a high-resolution digital file and a print-ready PDF option for printing at home."
+  },
+  {
+    company: aipassportphoto,
     title: "Privacy and retention",
-    content: "Customer photos are stored only as needed to provide the service and are deleted after 30 days unless the customer asks for earlier deletion."
+    content: "AI Passport Photo says customer photos are stored only as needed to provide the service and are deleted after 30 days unless the customer asks for earlier deletion."
+  },
+  {
+    company: aipassportphoto,
+    title: "Deletion policy",
+    content: "AI Passport Photo says uploaded customer photos are deleted after 30 days unless the customer asks for earlier deletion."
+  },
+  {
+    company: aipassportphoto,
+    title: "Payment security",
+    content: "AI Passport Photo says payments are processed securely through Stripe and the site uses 256-bit SSL encryption."
+  },
+  {
+    company: aipassportphoto,
+    title: "Supported countries",
+    content: "AI Passport Photo says it supports the US, UK, Canada, Germany, the European Union, Switzerland, India, Australia, Japan, China, Brazil, and more international formats."
+  },
+  {
+    company: aipassportphoto,
+    title: "Canada passport photos",
+    content: "AI Passport Photo says it supports Canada passport photos in a 50 x 70 mm format."
+  },
+  {
+    company: aipassportphoto,
+    title: "UK visa and passport photos",
+    content: "AI Passport Photo says it supports UK requirements and shows UK passport photo support on the site. The site also says it supports passport and visa photo formats for the UK."
   },
   {
     company: aipassportphoto,
