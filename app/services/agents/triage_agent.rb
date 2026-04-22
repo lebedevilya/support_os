@@ -171,7 +171,7 @@ module Agents
         }
       )
 
-      return nil if response[:reply].to_s.strip.empty? && response[:confidence].to_f < 0.3
+      return nil if response[:reply].to_s.strip.empty?
       return fallback_knowledge_answer(matches.first.chunk) if unsupported_knowledge_reply?(response, matches)
 
       {
@@ -254,8 +254,6 @@ module Agents
     end
 
     def unsupported_knowledge_reply?(response, matches)
-      return false if matches.first.score < STRONG_KNOWLEDGE_MATCH_SCORE
-
       reply_tokens = grounding_tokens(response[:reply])
       return false if reply_tokens.empty?
 
@@ -339,7 +337,7 @@ module Agents
           - case-specific operational requests should route to specialist
           - requests for services this company cannot perform — such as renewing passports, submitting visa or passport applications, delivering or emailing photos directly to embassies or government agencies, or any other government-process action — have question_type service_cannot_perform and route to clarify; the reply must name the company by name and explain that it provides AI photo preparation only, not government services
           - distinguish a general policy question about refunds or guarantees from an active customer dispute
-          - extract the country into the country field when the customer asks about a passport, visa, or photo format for a specific country
+          - extract the country into the country field only when the customer explicitly names a real country or territory (e.g. "France", "Japan", "Brazil"); if no specific country name appears in the message, leave country empty
           - do not offer human handoff in this step
         PROMPT
         context: {
