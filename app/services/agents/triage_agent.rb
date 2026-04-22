@@ -190,6 +190,7 @@ module Agents
     def validated_cited_source_url(cited_source_url, matches)
       candidate = cited_source_url.to_s.strip
       return if candidate.blank?
+      return if matches.first.chunk.manual_entry.present?
 
       allowed_urls = matches.filter_map { |match| match.chunk.source&.url.presence }.uniq
       allowed_urls.include?(candidate) ? candidate : nil

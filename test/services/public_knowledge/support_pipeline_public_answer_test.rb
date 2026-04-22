@@ -699,6 +699,145 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     assert_equal manual_entry.title, knowledge_chunks.first[:manual_entry_title]
     assert_includes knowledge_chunks.first[:content], "50 x 70 mm"
   end
+
+  test "answers deletion questions from deletion policy knowledge" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Canada passport photos",
+      content: "AI Passport Photo supports Canada passport photos and checks the photo against the required 50 x 70 mm format.",
+      status: "active"
+    )
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Deletion policy",
+      content: "AI Passport Photo says uploaded customer photos are deleted after 30 days unless the customer asks for earlier deletion.",
+      status: "active"
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Do you delete uploaded photos?")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    reply = ticket.reload.messages.order(:created_at).last.content
+
+    assert_includes reply, "deleted after 30 days"
+    refute_includes reply, "Canada passport photos"
+  end
+
+  test "answers retention questions from privacy and retention knowledge" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Turnaround time",
+      content: "Most passport photo requests are completed in under 60 seconds. In heavier traffic, delivery can take up to 2 minutes.",
+      status: "active"
+    )
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Privacy and retention",
+      content: "AI Passport Photo says customer photos are stored only as needed to provide the service and are deleted after 30 days unless the customer asks for earlier deletion.",
+      status: "active"
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "How long do you keep my photo?")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    reply = ticket.reload.messages.order(:created_at).last.content
+
+    assert_includes reply, "deleted after 30 days"
+    refute_includes reply, "under 60 seconds"
+  end
+
+  test "does not cite the contact page for a germany passport support answer" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    contact_source = Knowledge::Source.create!(
+      company: company,
+      url: "https://www.aipassportphoto.co/contact",
+      title: "Contact",
+      source_kind: "website_page",
+      status: "imported",
+      extracted_text: "Contact support if you need help with passport photo questions."
+    )
+    contact_source.chunks.create!(
+      company: company,
+      content: "Contact support if you need help with passport photo questions.",
+      position: 0,
+      token_estimate: 12
+    )
+
+    manual_entry = Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Germany passport photos",
+      content: "AI Passport Photo supports Germany passport photos and can prepare them in the required format.",
+      status: "active"
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Do you support Germany passport photos?")
+
+    llm_client = FakeKnowledgeLlmClient.new(
+      {
+        needs_human_handoff: false,
+        confidence: 0.94,
+        reasoning_summary: "The customer is not explicitly asking for a human handoff."
+      },
+      {
+        reply: "Yes, Germany passport photos are supported.",
+        confidence: 0.95,
+        reasoning_summary: "Answered from the Germany support guidance.",
+        cited_source_url: "https://www.aipassportphoto.co/contact"
+      }
+    )
+
+    SupportPipeline.new(ticket: ticket, llm_client: llm_client).call
+
+    reply = ticket.reload.messages.order(:created_at).last.content
+    knowledge_call = llm_client.calls.find { |call| call[:task] == "knowledge_answer" }
+
+    assert_equal manual_entry.title, knowledge_call[:context][:knowledge_chunks].first[:manual_entry_title]
+    assert_includes reply, "Germany passport photos"
+    refute_includes reply, "https://www.aipassportphoto.co/contact"
+  end
 end
 
 class FakeKnowledgeLlmClient

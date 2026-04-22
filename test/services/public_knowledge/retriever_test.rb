@@ -162,4 +162,66 @@ class PublicKnowledge::RetrieverTest < ActiveSupport::TestCase
     assert_equal uk_source.chunks.first, results.first.chunk
     refute_equal canada_entry, results.first.chunk.manual_entry
   end
+
+  test "matches deletion questions to deletion policy manual knowledge" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Canada passport photos",
+      content: "AI Passport Photo supports Canada passport photos and prepares them in the required 50 x 70 mm format.",
+      status: "active"
+    )
+
+    deletion_entry = Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Deletion policy",
+      content: "AI Passport Photo says uploaded customer photos are deleted after 30 days unless the customer asks for earlier deletion.",
+      status: "active"
+    )
+
+    results = PublicKnowledge::Retriever.new(
+      company: company,
+      query: "Do you delete uploaded photos?"
+    ).matches
+
+    assert_equal deletion_entry, results.first.chunk.manual_entry
+    assert_includes results.first.chunk.content, "deleted after 30 days"
+  end
+
+  test "matches retention questions to privacy and retention manual knowledge" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Turnaround time",
+      content: "Most passport photo requests are completed in under 60 seconds. In heavier traffic, delivery can take up to 2 minutes.",
+      status: "active"
+    )
+
+    retention_entry = Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Privacy and retention",
+      content: "AI Passport Photo says customer photos are stored only as needed to provide the service and are deleted after 30 days unless the customer asks for earlier deletion.",
+      status: "active"
+    )
+
+    results = PublicKnowledge::Retriever.new(
+      company: company,
+      query: "How long do you keep my photo?"
+    ).matches
+
+    assert_equal retention_entry, results.first.chunk.manual_entry
+    assert_includes results.first.chunk.content, "stored only as needed"
+  end
 end

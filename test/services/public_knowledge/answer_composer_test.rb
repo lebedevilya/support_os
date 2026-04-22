@@ -58,4 +58,29 @@ class PublicKnowledge::AnswerComposerTest < ActiveSupport::TestCase
     assert_match(/\AYes, you can\./, answer)
     assert_includes answer, "Canada passport photos"
   end
+
+  test "prefers the primary turnaround sentence for timing questions" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto-timing",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+
+    manual_entry = Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Turnaround time",
+      content: "Most passport photo requests are completed in under 60 seconds. In heavier traffic, delivery can take up to 2 minutes.",
+      status: "active"
+    )
+    chunk = manual_entry.chunks.first
+
+    answer = PublicKnowledge::AnswerComposer.new(
+      question: "How long does the process take?",
+      chunk: chunk
+    ).call
+
+    assert_includes answer, "under 60 seconds"
+    refute_match(/\AHere’s what I found\. In heavier traffic/m, answer)
+  end
 end

@@ -6,9 +6,11 @@ module PublicKnowledge
   class Retriever
     Match = Struct.new(:chunk, :score, keyword_init: true)
     MAX_RESULTS = 3
-    MANUAL_ENTRY_BONUS = 1
+    MANUAL_ENTRY_BONUS = 3
     TITLE_TERM_WEIGHT = 2
     PHRASE_MATCH_WEIGHT = 3
+    TITLE_PHRASE_MATCH_WEIGHT = 6
+    SPECIFIC_TOPIC_MATCH_WEIGHT = 4
     MIN_TERM_LENGTH = 3
     SHORT_TERM_ALLOWLIST = %w[uk us eu uae].freeze
     STOPWORDS = %w[
@@ -33,13 +35,33 @@ module PublicKnowledge
       "location" => [ "address", "registered", "office", "company", "information", "registered address", "company information" ],
       "address" => [ "registered", "location", "office", "company", "information", "registered address", "company information" ],
       "guarantee" => %w[guarantee refund money-back],
-      "privacy" => %w[privacy deleted delete retention],
+      "privacy" => %w[privacy deleted delete deletion retention retain kept keep stored storage remove erase upload uploaded],
+      "delete" => %w[deleted deletion remove erase uploaded upload photos],
+      "deleted" => %w[delete deletion remove erase uploaded upload photos],
+      "retention" => %w[retain kept keep stored storage deleted delete photos],
+      "retain" => %w[retention kept keep stored storage deleted delete photos],
+      "keep" => %w[retention retain kept stored storage deleted delete photos],
+      "stored" => %w[storage retain retention keep kept deleted delete photos],
       "picture" => %w[photo],
       "photos" => %w[photo],
       "visa" => %w[visa],
+      "germany" => %w[germany german],
+      "german" => %w[germany german],
+      "us" => %w[us usa united-states american],
+      "united states" => %w[united-states us usa american],
       "uk" => %w[uk united-kingdom britain british],
       "human" => %w[human agent person],
       "escalate" => %w[handoff hand-off transfer]
+    }.freeze
+    PRIVACY_TERMS = %w[
+      privacy delete deleted deletion remove erase retention retain keep kept stored storage upload uploaded photo photos
+    ].freeze
+    COUNTRY_TERMS = {
+      "us" => %w[us usa united-states american],
+      "germany" => %w[germany german],
+      "canada" => %w[canada canadian],
+      "uk" => %w[uk united-kingdom britain british],
+      "india" => %w[india indian]
     }.freeze
 
     def initialize(company:, query:)
@@ -106,11 +128,15 @@ module PublicKnowledge
         bonus += PHRASE_MATCH_WEIGHT * TITLE_TERM_WEIGHT if title_text.include?(phrase)
         bonus
       end
+      title_phrase_score = title_phrase_bonus(title_text)
+      specific_topic_score = specific_topic_bonus(content_terms, title_terms, title_text)
       manual_bonus = chunk.manual_entry.present? ? MANUAL_ENTRY_BONUS : 0
 
       return 0 unless substantive_match?(matched_terms, phrase_score)
+      return 0 if privacy_query? && !privacy_match?(content_terms, title_terms)
+      return 0 if specific_country_query? && !specific_country_match?(content_terms, title_terms)
 
-      content_score + title_score + phrase_score + manual_bonus
+      content_score + title_score + phrase_score + title_phrase_score + specific_topic_score + manual_bonus
     end
 
     def normalized_query_terms
@@ -123,6 +149,7 @@ module PublicKnowledge
 
     def normalize_text(text)
       text.to_s.downcase
+        .gsub("united states", "united-states")
         .gsub("united kingdom", "united-kingdom")
         .gsub("money back", "money-back")
     end
@@ -151,6 +178,62 @@ module PublicKnowledge
 
     def substantive_match?(matched_terms, phrase_score)
       phrase_score.positive? || matched_terms.any? { |term| !company_name_terms.include?(term) }
+    end
+
+    def title_phrase_bonus(title_text)
+      query_title_terms.sum do |term|
+        title_text.include?(term) ? TITLE_PHRASE_MATCH_WEIGHT : 0
+      end
+    end
+
+    def specific_topic_bonus(content_terms, title_terms, title_text)
+      bonus = 0
+      bonus += SPECIFIC_TOPIC_MATCH_WEIGHT if privacy_query? && privacy_match?(content_terms, title_terms)
+
+      if specific_country_query? && specific_country_match?(content_terms, title_terms)
+        bonus += SPECIFIC_TOPIC_MATCH_WEIGHT
+        bonus += SPECIFIC_TOPIC_MATCH_WEIGHT if specific_country_title_match?(title_text)
+      end
+
+      bonus
+    end
+
+    def privacy_query?
+      (expanded_terms & PRIVACY_TERMS).any?
+    end
+
+    def privacy_match?(content_terms, title_terms)
+      ((content_terms | title_terms) & PRIVACY_TERMS).any?
+    end
+
+    def specific_country_query?
+      specific_country_terms.any?
+    end
+
+    def specific_country_match?(content_terms, title_terms)
+      expected = specific_country_terms
+      expected.any? && ((content_terms | title_terms) & expected).any?
+    end
+
+    def specific_country_title_match?(title_text)
+      specific_country_terms.any? { |term| title_text.include?(term) }
+    end
+
+    def specific_country_terms
+      @specific_country_terms ||= COUNTRY_TERMS.each_with_object(Set.new) do |(query_term, expansions), set|
+        next unless @query.include?(query_term)
+
+        expansions.each { |term| set << term }
+      end
+    end
+
+    def query_title_terms
+      @query_title_terms ||= begin
+        terms = []
+        terms.concat(specific_country_terms.to_a)
+        terms.concat(%w[deletion retention privacy turnaround]) if privacy_query?
+        terms.uniq
+      end
     end
   end
 end

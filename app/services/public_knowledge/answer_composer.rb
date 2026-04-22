@@ -11,8 +11,15 @@ module PublicKnowledge
       "how long" => %w[seconds second minutes minute instant instantly],
       "price" => %w[cost pricing prices],
       "pricing" => %w[price cost prices],
-      "take" => %w[seconds second minutes minute instant instantly],
-      "takes" => %w[seconds second minutes minute instant instantly],
+      "delete" => %w[deleted deletion remove erase uploaded upload photos],
+      "deleted" => %w[delete deletion remove erase uploaded upload photos],
+      "retention" => %w[retain kept keep stored storage deleted delete photos],
+      "retain" => %w[retention kept keep stored storage deleted delete photos],
+      "keep" => %w[retention retain kept stored storage deleted delete photos],
+      "germany" => %w[germany german],
+      "german" => %w[germany german],
+      "us" => %w[us usa united-states american],
+      "united states" => %w[united-states us usa american],
       "picture" => %w[photo photos]
     }.freeze
 
@@ -70,7 +77,8 @@ module PublicKnowledge
       terms = query_terms
 
       terms.sum { |term| text.include?(term) ? 1 : 0 } +
-        query_phrases.sum { |phrase| text.include?(phrase) ? 2 : 0 }
+        query_phrases.sum { |phrase| text.include?(phrase) ? 2 : 0 } +
+        duration_sentence_bonus(text)
     end
 
     def query_terms
@@ -95,8 +103,23 @@ module PublicKnowledge
       @query_phrases ||= TERM_EXPANSIONS.keys.select { |phrase| normalize_text(@question).include?(phrase) }
     end
 
+    def duration_sentence_bonus(text)
+      return 0 unless duration_question?
+
+      bonus = 0
+      bonus += 2 if text.include?("under ")
+      bonus += 1 if text.include?("most ")
+      bonus += 1 if text.include?("completed")
+      bonus
+    end
+
+    def duration_question?
+      normalized_question = normalize_text(@question)
+      normalized_question.include?("how long") || normalized_question.include?("take")
+    end
+
     def normalize_text(text)
-      text.to_s.downcase
+      text.to_s.downcase.gsub("united states", "united-states")
     end
   end
 end

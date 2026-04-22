@@ -227,6 +227,16 @@ end
   },
   {
     company: aipassportphoto,
+    title: "US passport photos",
+    content: "AI Passport Photo says it supports US passport photos and follows U.S. Department of State requirements for passport photo formatting."
+  },
+  {
+    company: aipassportphoto,
+    title: "Germany passport photos",
+    content: "AI Passport Photo says it supports Germany passport photos and can prepare them in the required format."
+  },
+  {
+    company: aipassportphoto,
     title: "Canada passport photos",
     content: "AI Passport Photo says it supports Canada passport photos in a 50 x 70 mm format."
   },
