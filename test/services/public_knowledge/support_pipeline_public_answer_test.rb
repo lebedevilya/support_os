@@ -526,6 +526,84 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     refute_equal "public_knowledge", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
   end
 
+  test "does not answer a low-information help message from support-contact knowledge" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    manual_entry = Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Support contact",
+      content: "Customers can contact AI Passport Photo support through the website contact page or by emailing help@aipassportphoto.co.",
+      status: "active"
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Please help")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    ticket.reload
+
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "triage", ticket.current_layer
+    refute_equal "public_knowledge", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
+    refute_includes ticket.messages.order(:created_at).last.content, manual_entry.content
+    assert_includes ticket.messages.order(:created_at).last.content, "What do you need help with today?"
+  end
+
+  test "does not answer a pricing question from incidental terms-of-service text" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    source = Knowledge::Source.create!(
+      company: company,
+      url: "https://www.aipassportphoto.co/terms",
+      title: "Terms of Service",
+      source_kind: "website_page",
+      status: "imported",
+      extracted_text: "By accessing or using the service, you agree to these terms. The service is operated by Picanha L.L.C-FZ."
+    )
+    source.chunks.create!(
+      company: company,
+      content: "By accessing or using the service, you agree to these terms. The service is operated by Picanha L.L.C-FZ.",
+      position: 0,
+      token_estimate: 20
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "What is the cost of using the service?")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    ticket.reload
+
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "triage", ticket.current_layer
+    refute_equal "public_knowledge", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
+    refute_includes ticket.messages.order(:created_at).last.content, "Terms of Service"
+    refute_includes ticket.messages.order(:created_at).last.content, "Picanha"
+  end
+
   test "curated manual knowledge is preferred for important faq answers" do
     company = Company.create!(
       name: "AI Passport Photo",

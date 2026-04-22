@@ -12,12 +12,16 @@ module PublicKnowledge
     MIN_TERM_LENGTH = 3
     SHORT_TERM_ALLOWLIST = %w[uk us eu uae].freeze
     STOPWORDS = %w[
-      a an and are can could do does for get here i in it me my no of on or please
-      really sure the this to we what when where why you your
+      a an and are can could do does for get help here how i in it know me my no of
+      on or please really service services sure the this to use using we what when
+      where why you your
     ].freeze
 
     TERM_EXPANSIONS = {
+      "cost" => %w[price prices pricing],
       "how long" => %w[seconds second minutes minute instant instantly],
+      "price" => %w[cost pricing prices],
+      "pricing" => %w[price cost prices],
       "take" => %w[seconds second minutes minute instant instantly],
       "support" => %w[support supported available],
       "payment" => %w[payments card cards billing visa mastercard amex apple-pay google-pay],
@@ -92,6 +96,7 @@ module PublicKnowledge
       title_text = normalize_text([ chunk.source&.title, chunk.manual_entry&.title ].compact.join(" "))
       content_terms = token_set(content_text)
       title_terms = token_set(title_text)
+      matched_terms = terms.select { |term| content_terms.include?(term) || title_terms.include?(term) }
 
       content_score = terms.sum { |term| content_terms.include?(term) ? term_weight(term) : 0 }
       title_score = terms.sum { |term| title_terms.include?(term) ? term_weight(term) * TITLE_TERM_WEIGHT : 0 }
@@ -102,6 +107,8 @@ module PublicKnowledge
         bonus
       end
       manual_bonus = chunk.manual_entry.present? ? MANUAL_ENTRY_BONUS : 0
+
+      return 0 unless substantive_match?(matched_terms, phrase_score)
 
       content_score + title_score + phrase_score + manual_bonus
     end
@@ -136,6 +143,14 @@ module PublicKnowledge
 
     def term_weight(term)
       SHORT_TERM_ALLOWLIST.include?(term) ? 4 : 1
+    end
+
+    def company_name_terms
+      @company_name_terms ||= @company.name.to_s.downcase.scan(/[a-z0-9-]+/).to_set
+    end
+
+    def substantive_match?(matched_terms, phrase_score)
+      phrase_score.positive? || matched_terms.any? { |term| !company_name_terms.include?(term) }
     end
   end
 end
