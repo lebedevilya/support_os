@@ -838,6 +838,48 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     assert_includes reply, "Germany passport photos"
     refute_includes reply, "https://www.aipassportphoto.co/contact"
   end
+
+  test "answers an unlisted country passport question from the other standard format option" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Other standard passport format",
+      content: "AI Passport Photo includes an Other (Standard) option in the country selector for a standard 35 x 45 mm passport photo format.",
+      status: "active"
+    )
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Privacy and retention",
+      content: "AI Passport Photo says customer photos are stored only as needed to provide the service and are deleted after 30 days unless the customer asks for earlier deletion.",
+      status: "active"
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Can I make photo for Russian passport")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    reply = ticket.reload.messages.order(:created_at).last.content
+    run_snapshot = JSON.parse(ticket.agent_runs.order(:created_at).last.output_snapshot)
+
+    assert_includes reply, "Other"
+    assert_includes reply, "35 x 45 mm"
+    refute_includes reply, "personal data"
+    refute_includes reply, "Privacy"
+    assert_equal "public_knowledge_standard_format", run_snapshot.fetch("source")
+  end
 end
 
 class FakeKnowledgeLlmClient

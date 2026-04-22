@@ -237,6 +237,11 @@ end
   },
   {
     company: aipassportphoto,
+    title: "Other standard passport format",
+    content: "AI Passport Photo includes an Other (Standard) option in the country selector for a standard 35 x 45 mm passport photo format."
+  },
+  {
+    company: aipassportphoto,
     title: "Canada passport photos",
     content: "AI Passport Photo says it supports Canada passport photos in a 50 x 70 mm format."
   },

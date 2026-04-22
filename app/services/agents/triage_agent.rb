@@ -27,6 +27,9 @@ module Agents
       rule_result = matched_support_rule_result
       return rule_result if rule_result
 
+      standard_format_result = standard_format_country_answer
+      return standard_format_result if standard_format_result
+
       knowledge_result = knowledge_answer
       return knowledge_result if knowledge_result
 
@@ -174,6 +177,31 @@ module Agents
         reasoning_summary: "Answered directly from company public knowledge.",
         input_snapshot: latest_message.content,
         tags: fallback_knowledge_tags(best_chunk)
+      }
+    end
+
+    def standard_format_country_answer
+      return unless passport_photo_country_question?
+      return if supported_country_question?
+
+      standard_entry = @ticket.company.knowledge_chunks
+        .joins(:manual_entry)
+        .find_by("LOWER(manual_knowledge_entries.title) LIKE ?", "%other standard passport format%")
+      return unless standard_entry
+
+      {
+        source: "public_knowledge_standard_format",
+        status: "awaiting_customer",
+        category: "policy",
+        priority: "normal",
+        route: "knowledge_answer",
+        current_layer: "triage",
+        confidence: 0.9,
+        decision: "knowledge_answer",
+        reply: PublicKnowledge::AnswerComposer.new(question: latest_message.content, chunk: standard_entry).call,
+        reasoning_summary: "Answered from the public standard-format option for countries not specifically listed in the seeded support entries.",
+        input_snapshot: latest_message.content,
+        tags: [ "public-knowledge", "knowledge-answer", "policy", "standard-format", normalize_tag(extracted_country_name) ].compact.uniq
       }
     end
 
@@ -463,8 +491,40 @@ module Agents
     def country_from(content)
       text = content.to_s.downcase
       return "canada" if text.include?("canada")
+      return "germany" if text.include?("germany") || text.include?("german")
+      return "us" if text.include?("united states") || text.include?(" us ") || text.include?("u.s.") || text.include?("american")
+      return "uk" if text.include?("united kingdom") || text.include?(" uk ") || text.include?("british")
 
       nil
+    end
+
+    def passport_photo_country_question?
+      text = latest_message.content.to_s.downcase
+      return false unless text.match?(/\b(passport|visa|photo|picture)\b/)
+
+      extracted_country_name.present?
+    end
+
+    def supported_country_question?
+      country_from(latest_message.content).present?
+    end
+
+    def extracted_country_name
+      @extracted_country_name ||= begin
+        text = latest_message.content.to_s.downcase
+        match = text.match(/\bfor\s+([a-z][a-z\s-]+?)\s+(passport|visa)\b/) ||
+          text.match(/\b([a-z][a-z\s-]+?)\s+(passport|visa)\b/)
+        if match.nil?
+          nil
+        else
+          candidate = match[1].to_s.strip
+          if candidate.blank? || %w[my your a an the other standard].include?(candidate)
+            nil
+          else
+            candidate
+          end
+        end
+      end
     end
 
     def normalize_tag(value)

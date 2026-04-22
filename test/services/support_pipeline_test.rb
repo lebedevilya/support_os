@@ -90,6 +90,34 @@ class SupportPipelineTest < ActiveSupport::TestCase
     assert_includes ticket.messages.order(:created_at).last.content, "UK"
   end
 
+  test "answers an unlisted passport country with the standard format option" do
+    Knowledge::ManualEntry.create!(
+      company: @company,
+      title: "Other standard passport format",
+      content: "AI Passport Photo includes an Other (Standard) option in the country selector for a standard 35 x 45 mm passport photo format.",
+      status: "active"
+    )
+
+    ticket = @company.tickets.create!(
+      customer: @customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Can I make photo for Russian passport")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    ticket.reload
+
+    assert_equal "awaiting_customer", ticket.status
+    assert_equal "triage", ticket.current_layer
+    assert_equal 1, ticket.agent_runs.count
+    assert_equal [ "TriageAgent" ], ticket.agent_runs.order(:created_at).pluck(:agent_name)
+    assert_includes ticket.messages.order(:created_at).last.content, "35 x 45 mm"
+    assert_equal "public_knowledge_standard_format", JSON.parse(ticket.agent_runs.order(:created_at).first.output_snapshot).fetch("source")
+  end
+
   test "offers a manual human handoff for an embassy refund dispute" do
     SupportRule.create!(
       name: "Embassy refund dispute",
