@@ -25,6 +25,26 @@ module Agents
       human_request_result = explicit_human_handoff_result
       return human_request_result if human_request_result
 
+      if @llm_client
+        intent_result = llm_intent_classification
+        return intent_clarify_result(intent_result) if intent_clarify?(intent_result)
+
+        rule_result = matched_support_rule_result(intent_result)
+        return rule_result if rule_result
+
+        standard_format_result = standard_format_country_answer(intent_result)
+        return standard_format_result if standard_format_result
+
+        knowledge_result = knowledge_answer(intent_result)
+        return knowledge_result if knowledge_result
+
+        blocker_fallback = blocked_request_handoff_result(intent_result)
+        return blocker_fallback if blocker_fallback
+
+        specialist_result = intent_specialist_result(intent_result)
+        return specialist_result if specialist_result
+      end
+
       return default_clarify_result if generic_support_opener?
 
       rule_result = matched_support_rule_result
@@ -89,16 +109,17 @@ module Agents
       nil
     end
 
-    def matched_support_rule_result
+    def matched_support_rule_result(intent_result = nil)
       match = SupportRuleMatcher.new(company: @ticket.company, content: latest_message.content).call
-      return if informational_question_better_answered_by_public_knowledge?(match)
+      return if informational_question_better_answered_by_public_knowledge?(match, intent_result)
       return unless match
 
       match.attributes.merge(input_snapshot: latest_message.content)
     end
 
-    def knowledge_answer
-      return if public_knowledge_blocked_by_rule?
+    def knowledge_answer(intent_result = nil)
+      return if public_knowledge_blocked_by_rule?(intent_result)
+      return if intent_result && !intent_prefers_knowledge?(intent_result)
 
       matches = PublicKnowledge::Retriever.new(company: @ticket.company, query: latest_message.content).matches
       return if matches.empty?
@@ -184,9 +205,9 @@ module Agents
       }
     end
 
-    def standard_format_country_answer
-      return unless passport_photo_country_question?
-      return if supported_country_question?
+    def standard_format_country_answer(intent_result = nil)
+      return unless passport_photo_country_question?(intent_result)
+      return if supported_country_question?(intent_result)
 
       standard_entry = @ticket.company.knowledge_chunks
         .joins(:manual_entry)
@@ -205,7 +226,7 @@ module Agents
         reply: PublicKnowledge::AnswerComposer.new(question: latest_message.content, chunk: standard_entry).call,
         reasoning_summary: "Answered from the public standard-format option for countries not specifically listed in the seeded support entries.",
         input_snapshot: latest_message.content,
-        tags: [ "public-knowledge", "knowledge-answer", "policy", "standard-format", normalize_tag(extracted_country_name) ].compact.uniq
+        tags: [ "public-knowledge", "knowledge-answer", "policy", "standard-format", normalize_tag(extracted_country_name(intent_result)) ].compact.uniq
       }
     end
 
@@ -289,6 +310,48 @@ module Agents
       default_clarify_result(source: "llm_error_fallback", confidence: 0.0, reasoning_summary: "LLM triage failure: #{e.message}")
     end
 
+    def llm_intent_classification
+      response = @llm_client.complete_json(
+        task: "intent_classification",
+        prompt: <<~PROMPT,
+          Classify the customer message for support routing.
+          Return keys:
+          - route: one of clarify, knowledge_answer, specialist
+          - intent: one of opener, off_topic, knowledge_question, case_specific_request, operational_request, other
+          - request_mode: one of informational, case_specific, action_request
+          - question_type: one of pricing, package, timing, guarantee, countries, camera, privacy, contact, payment, refund, account, technical, operational, off_topic, other
+          - country: optional string
+          - document_type: optional string
+          - category: optional one of billing, delivery, refund, policy, account, technical, other
+          - priority: optional one of low, normal, high
+          - confidence: decimal between 0 and 1
+          - reply: optional string; only include when route=clarify
+          - reasoning_summary: short sentence
+          - tags: array of strings
+          Rules:
+          - greetings, vague openers, and low-information messages should route to clarify
+          - off-topic or general-assistant requests should route to clarify with a short redirect back to company support
+          - broad product questions answerable from public website knowledge should route to knowledge_answer
+          - case-specific operational requests or requests the company cannot perform should route to specialist
+          - distinguish a general policy question about refunds or guarantees from an active customer dispute
+          - extract the country when the customer asks about a passport, visa, or photo format for a country
+          - do not offer human handoff in this step
+        PROMPT
+        context: {
+          company: @ticket.company.name,
+          latest_message: latest_message.content,
+          message_history: message_history
+        }
+      )
+
+      return unless response.is_a?(Hash)
+      return unless %w[clarify knowledge_answer specialist].include?(response[:route].to_s)
+
+      response
+    rescue StandardError
+      nil
+    end
+
     def build_llm_result(response)
       route = normalized_route(response)
 
@@ -328,12 +391,16 @@ module Agents
       @ticket.messages.order(:created_at).pluck(:role, :content)
     end
 
-    def public_knowledge_blocked_by_rule?
-      SupportRuleMatcher.new(company: @ticket.company, content: latest_message.content, blocker_only: true).call.present?
+    def public_knowledge_blocked_by_rule?(intent_result = nil)
+      match = SupportRuleMatcher.new(company: @ticket.company, content: latest_message.content, blocker_only: true).call
+      return false unless match
+      return false if intent_informational_question?(intent_result) && strong_public_knowledge_match?
+
+      true
     end
 
-    def blocked_request_handoff_result
-      return unless public_knowledge_blocked_by_rule?
+    def blocked_request_handoff_result(intent_result = nil)
+      return unless public_knowledge_blocked_by_rule?(intent_result)
 
       human_handoff_offer_result(
         source: "fallback",
@@ -365,6 +432,27 @@ module Agents
         reasoning_summary: reasoning_summary,
         input_snapshot: latest_message.content,
         tags: %w[clarify greeting]
+      }
+    end
+
+    def intent_clarify?(intent_result)
+      intent_result&.dig(:route).to_s == "clarify"
+    end
+
+    def intent_clarify_result(intent_result)
+      {
+        source: "llm_intent",
+        status: "awaiting_customer",
+        category: normalized_category(intent_result[:category]),
+        priority: normalized_priority(intent_result[:priority]),
+        route: "clarify",
+        current_layer: "triage",
+        confidence: numeric_confidence(intent_result[:confidence]),
+        decision: "clarify",
+        reply: intent_result[:reply].presence || default_clarify_result[:reply],
+        reasoning_summary: intent_result[:reasoning_summary].presence || "The LLM classifier requested clarification.",
+        input_snapshot: latest_message.content,
+        tags: normalized_tags(intent_result[:tags], fallback_tags: %w[clarify])
       }
     end
 
@@ -424,6 +512,25 @@ module Agents
       }
     end
 
+    def intent_specialist_result(intent_result)
+      return unless intent_result&.dig(:route).to_s == "specialist"
+
+      {
+        source: "llm_intent",
+        status: "in_progress",
+        category: normalized_category(intent_result[:category]),
+        priority: normalized_priority(intent_result[:priority]),
+        route: "specialist",
+        current_layer: "specialist",
+        confidence: numeric_confidence(intent_result[:confidence]),
+        decision: "triage",
+        reply: nil,
+        reasoning_summary: intent_result[:reasoning_summary].presence || "The LLM classifier routed this request to specialist review.",
+        input_snapshot: latest_message.content,
+        tags: normalized_tags(intent_result[:tags], fallback_tags: %w[triage specialist])
+      }
+    end
+
     def human_handoff_offer_result(source:, category:, priority:, current_layer:, confidence:, escalation_reason:, handoff_note:, summary:, reply:, reasoning_summary:, input_snapshot:, tags:)
       {
         source: source,
@@ -469,6 +576,14 @@ module Agents
       tags.presence || fallback_tags
     end
 
+    def intent_prefers_knowledge?(intent_result)
+      intent_result[:route].to_s == "knowledge_answer"
+    end
+
+    def intent_informational_question?(intent_result)
+      intent_result&.dig(:request_mode).to_s == "informational"
+    end
+
     def fallback_knowledge_tags(chunk)
       [
         "public-knowledge",
@@ -506,18 +621,21 @@ module Agents
       nil
     end
 
-    def passport_photo_country_question?
+    def passport_photo_country_question?(intent_result = nil)
       text = latest_message.content.to_s.downcase
       return false unless text.match?(/\b(passport|visa|photo|picture)\b/)
 
-      extracted_country_name.present?
+      extracted_country_name(intent_result).present?
     end
 
-    def supported_country_question?
-      country_from(latest_message.content).present?
+    def supported_country_question?(intent_result = nil)
+      country_from(latest_message.content).present? || normalized_intent_country(intent_result).present?
     end
 
-    def extracted_country_name
+    def extracted_country_name(intent_result = nil)
+      intent_country = normalized_intent_country(intent_result)
+      return intent_country if intent_country.present?
+
       @extracted_country_name ||= begin
         text = latest_message.content.to_s.downcase
         match = text.match(/\bfor\s+([a-z][a-z\s-]+?)\s+(passport|visa)\b/) ||
@@ -535,12 +653,23 @@ module Agents
       end
     end
 
-    def informational_question_better_answered_by_public_knowledge?(match)
+    def informational_question_better_answered_by_public_knowledge?(match, intent_result = nil)
       return false unless match&.attributes&.dig(:route) == "offer_human_handoff"
-      return false unless latest_message.content.to_s.include?("?")
+      return false unless intent_informational_question?(intent_result) || latest_message.content.to_s.include?("?")
 
+      strong_public_knowledge_match?
+    end
+
+    def strong_public_knowledge_match?
       top_match = PublicKnowledge::Retriever.new(company: @ticket.company, query: latest_message.content).matches.first
       top_match.present? && top_match.score >= STRONG_KNOWLEDGE_MATCH_SCORE
+    end
+
+    def normalized_intent_country(intent_result)
+      candidate = intent_result&.dig(:country).to_s.strip.downcase
+      return if candidate.blank?
+
+      candidate
     end
 
     def normalize_tag(value)

@@ -470,10 +470,10 @@ class SupportPipelineTest < ActiveSupport::TestCase
 
     assert_equal "awaiting_customer", ticket.status
     assert_equal 3, llm_client.calls.size
-    assert_equal [ "human_handoff_intent", "triage", "specialist" ], llm_client.calls.map { |call| call[:task] }
+    assert_equal [ "human_handoff_intent", "intent_classification", "specialist" ], llm_client.calls.map { |call| call[:task] }
     assert_includes ticket.messages.order(:created_at).last.content, "Canada"
     assert_equal [ "canada", "passport", "policy", "supported-country" ], ticket.reload.tag_list.sort
-    triage_call = llm_client.calls.find { |call| call[:task] == "triage" }
+    triage_call = llm_client.calls.find { |call| call[:task] == "intent_classification" }
     specialist_call = llm_client.calls.find { |call| call[:task] == "specialist" }
     expected_history = [
       [ "user", "Hi" ],
@@ -484,7 +484,7 @@ class SupportPipelineTest < ActiveSupport::TestCase
     assert_equal expected_history, specialist_call[:context][:message_history]
     triage_run = ticket.agent_runs.order(:created_at).first
     specialist_run = ticket.agent_runs.order(:created_at).second
-    assert_equal "llm", JSON.parse(triage_run.output_snapshot).fetch("source")
+    assert_equal "llm_intent", JSON.parse(triage_run.output_snapshot).fetch("source")
     assert_equal "llm", JSON.parse(specialist_run.output_snapshot).fetch("source")
   end
 

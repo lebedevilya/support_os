@@ -42,6 +42,15 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
         reasoning_summary: "The customer is not explicitly asking for a human handoff."
       },
       {
+        route: "knowledge_answer",
+        intent: "knowledge_question",
+        request_mode: "informational",
+        question_type: "timing",
+        confidence: 0.95,
+        reasoning_summary: "This is a general timing question answerable from public knowledge.",
+        tags: [ "timing", "knowledge" ]
+      },
+      {
         reply: "It usually takes under 60 seconds.",
         confidence: 0.93,
         reasoning_summary: "Answered from the homepage delivery timing text.",
@@ -62,7 +71,7 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     assert_includes reply, "Source:"
     assert_includes reply, "https://www.aipassportphoto.co/"
     assert_equal "policy", ticket.category
-    assert_equal [ "human_handoff_intent", "knowledge_answer" ], llm_client.calls.map { |call| call[:task] }
+    assert_equal [ "human_handoff_intent", "intent_classification", "knowledge_answer" ], llm_client.calls.map { |call| call[:task] }
     knowledge_call = llm_client.calls.find { |call| call[:task] == "knowledge_answer" }
     assert_includes knowledge_call[:context][:knowledge_chunks].first[:content], "Under 60 seconds"
     assert_equal [
@@ -111,6 +120,16 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
         needs_human_handoff: false,
         confidence: 0.94,
         reasoning_summary: "The customer is not explicitly asking for a human handoff."
+      },
+      {
+        route: "knowledge_answer",
+        intent: "knowledge_question",
+        request_mode: "informational",
+        question_type: "countries",
+        country: "canada",
+        confidence: 0.95,
+        reasoning_summary: "This is a general supported-country question answerable from public knowledge.",
+        tags: [ "passport", "canada", "knowledge" ]
       },
       {
         reply: "Yes, you can. Canada passport photos are supported.",
@@ -185,6 +204,15 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
         reasoning_summary: "The customer is not explicitly asking for a human handoff."
       },
       {
+        route: "knowledge_answer",
+        intent: "knowledge_question",
+        request_mode: "informational",
+        question_type: "contact",
+        confidence: 0.92,
+        reasoning_summary: "This is a public company information question answerable from public knowledge.",
+        tags: [ "contact", "knowledge" ]
+      },
+      {
         reply: "We don’t have the office location publicly listed. Please contact support@aipassportphoto.co for help.",
         confidence: 0.9,
         reasoning_summary: "Answered from the contact page.",
@@ -239,6 +267,15 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
         needs_human_handoff: false,
         confidence: 0.94,
         reasoning_summary: "The customer is not explicitly asking for a human handoff."
+      },
+      {
+        route: "knowledge_answer",
+        intent: "knowledge_question",
+        request_mode: "informational",
+        question_type: "pricing",
+        confidence: 0.88,
+        reasoning_summary: "This is a general pricing question that should use public knowledge if available.",
+        tags: [ "pricing", "knowledge" ]
       },
       {
         reply: "The provided public information does not include pricing details.",
@@ -684,6 +721,16 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
         reasoning_summary: "The customer is not explicitly asking for a human handoff."
       },
       {
+        route: "knowledge_answer",
+        intent: "knowledge_question",
+        request_mode: "informational",
+        question_type: "countries",
+        country: "canada",
+        confidence: 0.95,
+        reasoning_summary: "This is a general country support question answerable from curated public knowledge.",
+        tags: [ "passport", "canada", "knowledge" ]
+      },
+      {
         reply: "Yes, you can. Canada passport photos are supported.",
         confidence: 0.96,
         reasoning_summary: "Answered from the curated Canada passport photo guidance.",
@@ -820,6 +867,16 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
         needs_human_handoff: false,
         confidence: 0.94,
         reasoning_summary: "The customer is not explicitly asking for a human handoff."
+      },
+      {
+        route: "knowledge_answer",
+        intent: "knowledge_question",
+        request_mode: "informational",
+        question_type: "countries",
+        country: "germany",
+        confidence: 0.95,
+        reasoning_summary: "This is a general country support question answerable from public knowledge.",
+        tags: [ "passport", "germany", "knowledge" ]
       },
       {
         reply: "Yes, Germany passport photos are supported.",
