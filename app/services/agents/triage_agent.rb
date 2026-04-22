@@ -7,6 +7,9 @@ module Agents
     GENERIC_SUPPORT_OPENER_TOKENS = %w[
       hello hi hey morning afternoon evening support help please can you thanks thank-you
     ].freeze
+    GENERIC_COUNTRY_STOPWORDS = %w[
+      a an any embassy for me my our standard the their this us your
+    ].freeze
     GROUNDING_STOPWORDS = %w[
       a an and are at but by can details for from help here how i if in is it its know
       located me my of on or our please the their they this to us want what where with
@@ -88,6 +91,7 @@ module Agents
 
     def matched_support_rule_result
       match = SupportRuleMatcher.new(company: @ticket.company, content: latest_message.content).call
+      return if informational_question_better_answered_by_public_knowledge?(match)
       return unless match
 
       match.attributes.merge(input_snapshot: latest_message.content)
@@ -266,6 +270,9 @@ module Agents
           Rules:
           - greetings, vague openers, or low-information messages should use clarify with a short company-specific follow-up question
           - off-topic chatter should use clarify with a brief redirect back to company support
+          - unsupported operational requests should use clarify with a brief redirect back to company support
+          - never act like a general assistant for poems, recipes, weather, shopping, or government processing tasks
+          - never claim the company can renew passports, submit applications, or email photos directly to embassies unless the provided context explicitly says so
           - do not offer human handoff from this step; explicit human requests are handled separately before triage
           - if the request mentions embassy rejection, government rejection, or a disputed refund, keep the reply neutral and route as specialist only when the message is otherwise actionable
         PROMPT
@@ -492,6 +499,7 @@ module Agents
       text = content.to_s.downcase
       return "canada" if text.include?("canada")
       return "germany" if text.include?("germany") || text.include?("german")
+      return "india" if text.include?("india") || text.include?("indian")
       return "us" if text.include?("united states") || text.include?(" us ") || text.include?("u.s.") || text.include?("american")
       return "uk" if text.include?("united kingdom") || text.include?(" uk ") || text.include?("british")
 
@@ -518,13 +526,21 @@ module Agents
           nil
         else
           candidate = match[1].to_s.strip
-          if candidate.blank? || %w[my your a an the other standard].include?(candidate)
+          if candidate.blank? || GENERIC_COUNTRY_STOPWORDS.include?(candidate)
             nil
           else
             candidate
           end
         end
       end
+    end
+
+    def informational_question_better_answered_by_public_knowledge?(match)
+      return false unless match&.attributes&.dig(:route) == "offer_human_handoff"
+      return false unless latest_message.content.to_s.include?("?")
+
+      top_match = PublicKnowledge::Retriever.new(company: @ticket.company, query: latest_message.content).matches.first
+      top_match.present? && top_match.score >= STRONG_KNOWLEDGE_MATCH_SCORE
     end
 
     def normalize_tag(value)

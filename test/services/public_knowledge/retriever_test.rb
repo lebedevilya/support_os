@@ -224,4 +224,58 @@ class PublicKnowledge::RetrieverTest < ActiveSupport::TestCase
     assert_equal retention_entry, results.first.chunk.manual_entry
     assert_includes results.first.chunk.content, "stored only as needed"
   end
+
+  test "matches selfie questions to camera guidance instead of unrelated country entries" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "US passport photos",
+      content: "AI Passport Photo says it supports US passport photos and follows U.S. Department of State requirements for passport photo formatting.",
+      status: "active"
+    )
+
+    camera_entry = Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Camera and lighting",
+      content: "Customers do not need a professional camera, special lighting, or a photo studio visit. The site says any normal selfie works and can be taken from a phone or computer webcam.",
+      status: "active"
+    )
+
+    results = PublicKnowledge::Retriever.new(
+      company: company,
+      query: "Can I use a normal selfie?"
+    ).matches
+
+    assert_equal camera_entry, results.first.chunk.manual_entry
+    refute_includes results.first.chunk.content, "Department of State"
+  end
+
+  test "rejects weak pricing matches for unrelated products" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Pricing",
+      content: "AI Passport Photo offers a $4.99 Image Only option and a $7.99 Image + Print PDF option.",
+      status: "active"
+    )
+
+    results = PublicKnowledge::Retriever.new(
+      company: company,
+      query: "How much is the price for a fishing rod?"
+    ).matches
+
+    assert_empty results
+  end
 end

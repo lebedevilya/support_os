@@ -880,6 +880,190 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
     refute_includes reply, "Privacy"
     assert_equal "public_knowledge_standard_format", run_snapshot.fetch("source")
   end
+
+  test "answers selfie questions from camera guidance instead of unrelated country knowledge" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "US passport photos",
+      content: "AI Passport Photo says it supports US passport photos and follows U.S. Department of State requirements for passport photo formatting.",
+      status: "active"
+    )
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Camera and lighting",
+      content: "Customers do not need a professional camera, a studio visit, or special lighting. Any normal selfie taken from a phone or computer webcam works.",
+      status: "active"
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Can I use a normal selfie?")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    reply = ticket.reload.messages.order(:created_at).last.content
+
+    assert_includes reply, "selfie"
+    refute_includes reply, "U.S. Department of State"
+  end
+
+  test "answers india passport questions from supported country knowledge instead of the standard fallback" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Supported countries",
+      content: "AI Passport Photo says it supports the US, UK, Canada, Germany, the European Union, Switzerland, India, Australia, Japan, China, Brazil, and more international formats.",
+      status: "active"
+    )
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Other standard passport format",
+      content: "AI Passport Photo includes an Other (Standard) option in the country selector for a standard 35 x 45 mm passport photo format.",
+      status: "active"
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Do you support India passport photos?")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    reply = ticket.reload.messages.order(:created_at).last.content
+    run_snapshot = JSON.parse(ticket.agent_runs.order(:created_at).last.output_snapshot)
+
+    assert_includes reply, "India"
+    refute_includes reply, "Other (Standard)"
+    refute_equal "public_knowledge_standard_format", run_snapshot.fetch("source")
+  end
+
+  test "answers embassy refund questions from guarantee knowledge when the customer is asking a general question" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    SupportRule.create!(
+      company: company,
+      name: "Embassy refund dispute",
+      active: true,
+      priority: 10,
+      match_type: "all_terms",
+      terms: "embassy\nrefund",
+      route: "escalate",
+      category: "refund",
+      priority_level: "high",
+      confidence: 0.92,
+      reasoning_summary: "Embassy rejection disputes require human review.",
+      escalation_reason: "Refund dispute requires human review.",
+      handoff_note: "Escalated for human review because the customer reports an embassy rejection dispute."
+    )
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Money-back guarantee",
+      content: "AI Passport Photo offers a 100% money-back guarantee if a passport photo is rejected for compliance reasons. Rejection and refund disputes are still reviewed by human support before a final decision.",
+      status: "active"
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Will I get a refund if an embassy rejects my photo?")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    ticket.reload
+    reply = ticket.messages.order(:created_at).last.content
+
+    assert_equal false, ticket.human_handoff_available
+    assert_includes reply, "money-back guarantee"
+    refute_includes reply, "human specialist"
+  end
+
+  test "redirects off-topic product pricing questions instead of answering from ai passport pricing" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    Knowledge::ManualEntry.create!(
+      company: company,
+      title: "Pricing",
+      content: "AI Passport Photo offers a $4.99 Image Only option and a $7.99 Image + Print PDF option.",
+      status: "active"
+    )
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "How much is the price for a fishing rod?")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    reply = ticket.reload.messages.order(:created_at).last.content
+
+    refute_includes reply, "$4.99"
+    assert_includes reply, "AI Passport Photo support"
+  end
+
+  test "redirects non-support requests instead of acting like a general assistant" do
+    company = Company.create!(
+      name: "AI Passport Photo",
+      slug: "aipassportphoto",
+      description: "Passport photo support",
+      support_email: "help@aipassportphoto.co"
+    )
+    customer = Customer.create!(email: "review@example.com")
+
+    ticket = company.tickets.create!(
+      customer: customer,
+      status: "new",
+      channel: "widget",
+      current_layer: "triage"
+    )
+    ticket.messages.create!(role: "user", content: "Write me a poem about bananas.")
+
+    SupportPipeline.new(ticket: ticket, llm_client: false).call
+
+    reply = ticket.reload.messages.order(:created_at).last.content
+
+    assert_includes reply, "AI Passport Photo support"
+    refute_includes reply, "Yellow peel"
+  end
 end
 
 class FakeKnowledgeLlmClient

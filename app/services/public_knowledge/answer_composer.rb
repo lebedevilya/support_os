@@ -11,6 +11,9 @@ module PublicKnowledge
       "how long" => %w[seconds second minutes minute instant instantly],
       "price" => %w[cost pricing prices],
       "pricing" => %w[price cost prices],
+      "embassy" => %w[embassy rejected rejection refund guarantee],
+      "reject" => %w[rejected rejection refund guarantee],
+      "rejected" => %w[reject rejection refund guarantee],
       "delete" => %w[deleted deletion remove erase uploaded upload photos],
       "deleted" => %w[delete deletion remove erase uploaded upload photos],
       "retention" => %w[retain kept keep stored storage deleted delete photos],
@@ -20,7 +23,12 @@ module PublicKnowledge
       "german" => %w[germany german],
       "us" => %w[us usa united-states american],
       "united states" => %w[united-states us usa american],
-      "picture" => %w[photo photos]
+      "picture" => %w[photo photos],
+      "selfie" => %w[selfie phone computer webcam camera],
+      "webcam" => %w[computer webcam selfie camera],
+      "camera" => %w[camera selfie webcam phone computer lighting studio],
+      "lighting" => %w[lighting camera selfie webcam studio],
+      "studio" => %w[studio selfie webcam camera phone computer]
     }.freeze
 
     def initialize(question:, chunk:)

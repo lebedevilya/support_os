@@ -18,6 +18,14 @@ module PublicKnowledge
       on or please really service services sure the this to use using we what when
       where why you your
     ].freeze
+    GENERIC_QUERY_TERMS = %w[
+      ai app company customer customers help image images make passport passports photo photos
+      picture pictures please service services support use using want works
+    ].freeze
+    GENERIC_MATCH_TERMS = %w[
+      contact contacts cost costs guarantee guarantees payment payments price prices pricing
+      service services support
+    ].freeze
 
     TERM_EXPANSIONS = {
       "cost" => %w[price prices pricing],
@@ -35,6 +43,9 @@ module PublicKnowledge
       "location" => [ "address", "registered", "office", "company", "information", "registered address", "company information" ],
       "address" => [ "registered", "location", "office", "company", "information", "registered address", "company information" ],
       "guarantee" => %w[guarantee refund money-back],
+      "embassy" => %w[embassy rejection rejected refund guarantee authority],
+      "reject" => %w[reject rejected rejection refund guarantee],
+      "rejected" => %w[reject rejection refund guarantee],
       "privacy" => %w[privacy deleted delete deletion retention retain kept keep stored storage remove erase upload uploaded],
       "delete" => %w[deleted deletion remove erase uploaded upload photos],
       "deleted" => %w[delete deletion remove erase uploaded upload photos],
@@ -44,6 +55,13 @@ module PublicKnowledge
       "stored" => %w[storage retain retention keep kept deleted delete photos],
       "picture" => %w[photo],
       "photos" => %w[photo],
+      "selfie" => %w[selfie phone computer webcam camera],
+      "webcam" => %w[computer webcam selfie camera],
+      "camera" => %w[camera selfie webcam phone computer lighting studio],
+      "lighting" => %w[lighting camera selfie webcam studio],
+      "studio" => %w[studio selfie webcam camera phone computer],
+      "travel" => %w[studio camera selfie],
+      "professional" => %w[camera lighting studio selfie webcam],
       "visa" => %w[visa],
       "germany" => %w[germany german],
       "german" => %w[germany german],
@@ -95,7 +113,7 @@ module PublicKnowledge
     def expanded_terms
       terms = normalized_query_terms.dup
       TERM_EXPANSIONS.each do |phrase, expansions|
-        next unless @query.include?(phrase)
+        next unless query_includes_phrase?(phrase)
 
         terms.concat(expansions.flat_map { |expansion| expansion.to_s.split(/\s+/) })
       end
@@ -107,7 +125,7 @@ module PublicKnowledge
 
     def expanded_phrases
       TERM_EXPANSIONS.each_with_object([]) do |(phrase, expansions), phrases|
-        next unless @query.include?(phrase)
+        next unless query_includes_phrase?(phrase)
 
         phrases.concat(expansions.select { |expansion| expansion.to_s.include?(" ") })
       end.map { |phrase| normalize_phrase(phrase) }.compact.uniq
@@ -119,6 +137,7 @@ module PublicKnowledge
       content_terms = token_set(content_text)
       title_terms = token_set(title_text)
       matched_terms = terms.select { |term| content_terms.include?(term) || title_terms.include?(term) }
+      raw_focus_terms = raw_query_focus_terms
 
       content_score = terms.sum { |term| content_terms.include?(term) ? term_weight(term) : 0 }
       title_score = terms.sum { |term| title_terms.include?(term) ? term_weight(term) * TITLE_TERM_WEIGHT : 0 }
@@ -133,6 +152,7 @@ module PublicKnowledge
       manual_bonus = chunk.manual_entry.present? ? MANUAL_ENTRY_BONUS : 0
 
       return 0 unless substantive_match?(matched_terms, phrase_score)
+      return 0 if mismatched_specific_request?(raw_focus_terms, matched_terms)
       return 0 if privacy_query? && !privacy_match?(content_terms, title_terms)
       return 0 if specific_country_query? && !specific_country_match?(content_terms, title_terms)
 
@@ -180,6 +200,14 @@ module PublicKnowledge
       phrase_score.positive? || matched_terms.any? { |term| !company_name_terms.include?(term) }
     end
 
+    def mismatched_specific_request?(focus_terms, matched_terms)
+      return false if focus_terms.empty?
+      return false if matched_terms.empty?
+
+      unmatched_focus_terms = focus_terms - matched_terms
+      unmatched_focus_terms.size >= 2 && matched_terms.all? { |term| GENERIC_MATCH_TERMS.include?(term) }
+    end
+
     def title_phrase_bonus(title_text)
       query_title_terms.sum do |term|
         title_text.include?(term) ? TITLE_PHRASE_MATCH_WEIGHT : 0
@@ -221,9 +249,21 @@ module PublicKnowledge
 
     def specific_country_terms
       @specific_country_terms ||= COUNTRY_TERMS.each_with_object(Set.new) do |(query_term, expansions), set|
-        next unless @query.include?(query_term)
+        next unless query_includes_country_term?(query_term)
 
         expansions.each { |term| set << term }
+      end
+    end
+
+    def query_includes_country_term?(query_term)
+      query_includes_phrase?(query_term)
+    end
+
+    def query_includes_phrase?(phrase)
+      if phrase.include?(" ")
+        @query.include?(phrase)
+      else
+        normalized_query_terms.include?(phrase)
       end
     end
 
@@ -234,6 +274,17 @@ module PublicKnowledge
         terms.concat(%w[deletion retention privacy turnaround]) if privacy_query?
         terms.uniq
       end
+    end
+
+    def raw_query_focus_terms
+      @raw_query_focus_terms ||= normalize_text(@raw_query).scan(/[a-z0-9-]+/).filter_map do |term|
+        next if STOPWORDS.include?(term)
+        next if company_name_terms.include?(term)
+        next if GENERIC_QUERY_TERMS.include?(term)
+        next if term.length < MIN_TERM_LENGTH && !SHORT_TERM_ALLOWLIST.include?(term)
+
+        term
+      end.uniq
     end
   end
 end

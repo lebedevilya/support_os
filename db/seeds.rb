@@ -198,7 +198,7 @@ end
   {
     company: aipassportphoto,
     title: "Camera and lighting",
-    content: "Customers do not need a professional camera or special lighting. The site says any selfie works and can be taken from a phone or computer."
+    content: "Customers do not need a professional camera, special lighting, or a photo studio visit. The site says any normal selfie works and can be taken from a phone or computer webcam."
   },
   {
     company: aipassportphoto,
