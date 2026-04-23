@@ -1,5 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
-import { renderStreamMessage } from "@hotwired/turbo"
+import { renderStreamMessage } from "@hotwired/turbo-rails"
 
 export default class extends Controller {
   static values = { url: String, interval: { type: Number, default: 3000 } }
