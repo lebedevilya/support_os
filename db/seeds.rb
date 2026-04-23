@@ -261,6 +261,11 @@ end
     content: "Retakes are completely free. If you are not happy with the result, you can retake your photo as many times as you need at no extra charge."
   },
   {
+    company: aipassportphoto,
+    title: "Supported country formats list",
+    content: "AI Passport Photo supports the following passport and visa photo formats: United States (50.8x50.8mm), Canada (50x70mm), Germany (35x45mm), European Union (35x45mm), Switzerland (35x45mm), United Kingdom (35x45mm), India (35x45mm), Australia (35x45mm), Japan (35x45mm), China (33x48mm), Brazil (50x70mm). For any other country not listed individually, customers can select the Other (Standard) option which uses the standard 35x45mm format accepted by most countries worldwide, including France, Russia, and many others."
+  },
+  {
     company: nodes_garden,
     title: "Provisioning lifecycle",
     content: "New nodes.garden deployments move through provisioning, syncing, and healthy states. Provisioning delays can happen while infrastructure boots or while the node catches up to chain state."

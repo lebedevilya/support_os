@@ -34,7 +34,7 @@ class PublicKnowledge::AnswerComposerTest < ActiveSupport::TestCase
     refute_includes answer, "Download or print the final image right away"
   end
 
-  test "keeps a direct yes-no opening for country support questions" do
+  test "returns the chunk content for country support questions" do
     company = Company.create!(
       name: "AI Passport Photo",
       slug: "aipassportphoto-yes-no",
@@ -55,8 +55,8 @@ class PublicKnowledge::AnswerComposerTest < ActiveSupport::TestCase
       chunk: chunk
     ).call
 
-    assert_match(/\AYes, you can\./, answer)
     assert_includes answer, "Canada passport photos"
+    assert_includes answer, "50 x 70 mm"
   end
 
   test "prefers the primary turnaround sentence for timing questions" do

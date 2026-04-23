@@ -157,6 +157,7 @@ unless TOKEN.present?
 end
 
 results = CASES.each_with_index.map do |question, index|
+  print('.')
   opener = OPENERS[index % OPENERS.length]
   email = "qa+#{Time.now.to_i}-#{index}-#{SecureRandom.hex(4)}@example.com"
 

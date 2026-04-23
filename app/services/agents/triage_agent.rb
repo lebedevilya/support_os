@@ -4,12 +4,6 @@ module Agents
     STRONG_KNOWLEDGE_MATCH_SCORE = 4
     GROUNDED_REPLY_UNSUPPORTED_RATIO = 0.35
     GROUNDED_REPLY_MIN_UNSUPPORTED_TOKENS = 3
-    GENERIC_SUPPORT_OPENER_TOKENS = %w[
-      hello hi hey morning afternoon evening support help please can you thanks thank-you
-    ].freeze
-    GENERIC_COUNTRY_STOPWORDS = %w[
-      a an any embassy for me my our standard the their this us your
-    ].freeze
     GROUNDING_STOPWORDS = %w[
       a an and are at but by can details for from help here how i if in is it its know
       located me my of on or our please the their they this to us want what where with
@@ -25,50 +19,27 @@ module Agents
       human_request_result = explicit_human_handoff_result
       return human_request_result if human_request_result
 
-      if @llm_client
-        intent_result = llm_intent_classification
-        return intent_clarify_result(intent_result) if intent_clarify?(intent_result)
+      intent_result = llm_intent_classification
+      return intent_clarify_result(intent_result) if intent_clarify?(intent_result)
 
-        rule_result = matched_support_rule_result(intent_result)
-        return rule_result if rule_result
-
-        standard_format_result = standard_format_country_answer(intent_result)
-        return standard_format_result if standard_format_result
-
-        knowledge_result = knowledge_answer(intent_result)
-        return knowledge_result if knowledge_result
-
-        blocker_fallback = blocked_request_handoff_result(intent_result)
-        return blocker_fallback if blocker_fallback
-
-        specialist_result = intent_specialist_result(intent_result)
-        return specialist_result if specialist_result
-
-        return llm_triage
-      end
-
-      return default_clarify_result if generic_support_opener?
-
-      rule_result = matched_support_rule_result
+      rule_result = matched_support_rule_result(intent_result)
       return rule_result if rule_result
 
-      standard_format_result = standard_format_country_answer
-      return standard_format_result if standard_format_result
-
-      knowledge_result = knowledge_answer
+      knowledge_result = knowledge_answer(intent_result)
       return knowledge_result if knowledge_result
 
-      blocker_fallback = blocked_request_handoff_result
+      blocker_fallback = blocked_request_handoff_result(intent_result)
       return blocker_fallback if blocker_fallback
 
-      default_clarify_result
+      specialist_result = intent_specialist_result(intent_result)
+      return specialist_result if specialist_result
+
+      llm_triage
     end
 
     private
 
     def explicit_human_handoff_result
-      return unless @llm_client
-
       response = @llm_client.complete_json(
         task: "human_handoff_intent",
         prompt: <<~PROMPT,
@@ -125,9 +96,7 @@ module Agents
       return if matches.empty?
       return if matches.first.score < KNOWLEDGE_MIN_SCORE
 
-      return llm_knowledge_answer(matches) if @llm_client
-
-      fallback_knowledge_answer(matches.first.chunk)
+      llm_knowledge_answer(matches)
     end
 
     def llm_knowledge_answer(matches)
@@ -190,50 +159,7 @@ module Agents
         tags: normalized_tags(response[:tags], fallback_tags: knowledge_tags(matches))
       }
     rescue StandardError
-      fallback_knowledge_answer(matches.first.chunk)
-    end
-
-    def fallback_knowledge_answer(best_chunk)
-      {
-        source: "public_knowledge",
-        status: "awaiting_customer",
-        category: "policy",
-        priority: "normal",
-        route: "knowledge_answer",
-        current_layer: "triage",
-        confidence: 0.9,
-        decision: "knowledge_answer",
-        reply: PublicKnowledge::AnswerComposer.new(question: latest_message.content, chunk: best_chunk).call,
-        reasoning_summary: "Answered directly from company public knowledge.",
-        input_snapshot: latest_message.content,
-        tags: fallback_knowledge_tags(best_chunk)
-      }
-    end
-
-    def standard_format_country_answer(intent_result = nil)
-      return if intent_result && intent_result[:question_type].to_s != "countries"
-      return unless passport_photo_country_question?(intent_result)
-      return if supported_country_question?(intent_result)
-
-      standard_entry = @ticket.company.knowledge_chunks
-        .joins(:manual_entry)
-        .find_by("LOWER(manual_knowledge_entries.title) LIKE ?", "%other standard passport format%")
-      return unless standard_entry
-
-      {
-        source: "public_knowledge_standard_format",
-        status: "awaiting_customer",
-        category: "policy",
-        priority: "normal",
-        route: "knowledge_answer",
-        current_layer: "triage",
-        confidence: 0.9,
-        decision: "knowledge_answer",
-        reply: PublicKnowledge::AnswerComposer.new(question: latest_message.content, chunk: standard_entry).call,
-        reasoning_summary: "Answered from the public standard-format option for countries not specifically listed in the seeded support entries.",
-        input_snapshot: latest_message.content,
-        tags: [ "public-knowledge", "knowledge-answer", "policy", "standard-format", normalize_tag(extracted_country_name(intent_result)) ].compact.uniq
-      }
+      nil
     end
 
     def compose_llm_knowledge_reply(reply, cited_source_url, matches)
@@ -385,14 +311,6 @@ module Agents
 
     def latest_message
       @ticket.messages.order(:created_at).last
-    end
-
-    def generic_support_opener?
-      tokens = latest_message.content.to_s.downcase.scan(/[a-z]+(?:-[a-z]+)?/)
-      return false if tokens.empty?
-      return false if tokens.size > 5
-
-      tokens.all? { |token| GENERIC_SUPPORT_OPENER_TOKENS.include?(token) }
     end
 
     def message_history
@@ -592,7 +510,11 @@ module Agents
       intent_result&.dig(:request_mode).to_s == "informational"
     end
 
-    def fallback_knowledge_tags(chunk)
+    def knowledge_tags(matches)
+      matches.flat_map { |match| chunk_tags(match.chunk) }.uniq
+    end
+
+    def chunk_tags(chunk)
       [
         "public-knowledge",
         "knowledge-answer",
@@ -601,10 +523,6 @@ module Agents
         normalize_tag(chunk.manual_entry&.title),
         normalize_tag(country_from(latest_message.content))
       ].compact.uniq
-    end
-
-    def knowledge_tags(matches)
-      matches.flat_map { |match| fallback_knowledge_tags(match.chunk) }.uniq
     end
 
     def triage_tags(response, route)
@@ -629,39 +547,6 @@ module Agents
       nil
     end
 
-    def passport_photo_country_question?(intent_result = nil)
-      text = latest_message.content.to_s.downcase
-      return false unless text.match?(/\b(passport|visa|photo|picture)\b/)
-
-      extracted_country_name(intent_result).present?
-    end
-
-    def supported_country_question?(_intent_result = nil)
-      country_from(latest_message.content).present?
-    end
-
-    def extracted_country_name(intent_result = nil)
-      intent_country = normalized_intent_country(intent_result)
-      return intent_country if intent_country.present?
-      return nil if intent_result
-
-      @extracted_country_name ||= begin
-        text = latest_message.content.to_s.downcase
-        match = text.match(/\bfor\s+([a-z][a-z\s-]+?)\s+(passport|visa)\b/) ||
-          text.match(/\b([a-z][a-z\s-]+?)\s+(passport|visa)\b/)
-        if match.nil?
-          nil
-        else
-          candidate = match[1].to_s.strip
-          if candidate.blank? || GENERIC_COUNTRY_STOPWORDS.include?(candidate)
-            nil
-          else
-            candidate
-          end
-        end
-      end
-    end
-
     def informational_question_better_answered_by_public_knowledge?(match, intent_result = nil)
       return false unless match&.attributes&.dig(:route) == "offer_human_handoff"
       return false unless intent_informational_question?(intent_result) || latest_message.content.to_s.include?("?")
@@ -672,13 +557,6 @@ module Agents
     def strong_public_knowledge_match?
       top_match = PublicKnowledge::Retriever.new(company: @ticket.company, query: latest_message.content).matches.first
       top_match.present? && top_match.score >= STRONG_KNOWLEDGE_MATCH_SCORE
-    end
-
-    def normalized_intent_country(intent_result)
-      candidate = intent_result&.dig(:country).to_s.strip.downcase
-      return if candidate.blank?
-
-      candidate
     end
 
     def normalize_tag(value)
