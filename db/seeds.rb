@@ -266,6 +266,21 @@ end
     content: "AI Passport Photo supports the following passport and visa photo formats: United States (50.8x50.8mm), Canada (50x70mm), Germany (35x45mm), European Union (35x45mm), Switzerland (35x45mm), United Kingdom (35x45mm), India (35x45mm), Australia (35x45mm), Japan (35x45mm), China (33x48mm), Brazil (50x70mm). For any other country not listed individually, customers can select the Other (Standard) option which uses the standard 35x45mm format accepted by most countries worldwide, including France, Russia, and many others."
   },
   {
+    company: aipassportphoto,
+    title: "Glasses in passport photos",
+    content: "Most countries including the US, UK, and Canada prohibit glasses in passport and visa photos. AI Passport Photo follows the current official glasses requirements for each supported country. To avoid compliance issues, we recommend removing glasses before taking your photo."
+  },
+  {
+    company: aipassportphoto,
+    title: "Unsupported document types",
+    content: "AI Passport Photo supports passport and visa photos only. We do not support driving licence photos, ID card photos, NEXUS card photos, Global Entry photos, or any other document types."
+  },
+  {
+    company: aipassportphoto,
+    title: "Passport and visa photo compatibility",
+    content: "AI Passport Photo can generate photos for passport applications and visa applications. Whether one photo can serve both purposes depends on the requirements of your country's issuing authority. Always verify the specific requirements for each document before submitting."
+  },
+  {
     company: nodes_garden,
     title: "Provisioning lifecycle",
     content: "New nodes.garden deployments move through provisioning, syncing, and healthy states. Provisioning delays can happen while infrastructure boots or while the node catches up to chain state."
