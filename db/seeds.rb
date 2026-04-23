@@ -256,6 +256,11 @@ end
     content: "Customers can contact AI Passport Photo support through the website contact page or by emailing help@aipassportphoto.co."
   },
   {
+    company: aipassportphoto,
+    title: "Retakes policy",
+    content: "Retakes are completely free. If you are not happy with the result, you can retake your photo as many times as you need at no extra charge."
+  },
+  {
     company: nodes_garden,
     title: "Provisioning lifecycle",
     content: "New nodes.garden deployments move through provisioning, syncing, and healthy states. Provisioning delays can happen while infrastructure boots or while the node catches up to chain state."
