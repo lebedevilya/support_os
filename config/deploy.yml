@@ -10,6 +10,7 @@ proxy:
   ssl: false
   host: 147.135.78.29
   app_port: 3000
+  response_timeout: 3600
   healthcheck:
     path: /up
     interval: 3
