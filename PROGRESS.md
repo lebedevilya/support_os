@@ -38,12 +38,15 @@ The core runtime is in place:
 - `Agents::TriageAgent` exists and now checks DB-backed support rules before knowledge retrieval
 - `Agents::SpecialistAgent` exists
 - `LLM::Client` uses `ruby_llm` while preserving the app-level workflow API
-- fallback heuristic behavior still exists when no LLM client is available
+- no-LLM fallback paths have been removed; both agents always assume an LLM client is available
 - triage can answer FAQ-style questions directly from `Knowledge::Chunk` retrieval
 - public knowledge import, same-domain link discovery, chunking, and retrieval services now exist
 - public-knowledge replies are LLM-composed from retrieved chunks only; triage does not get tool access
 - public-knowledge citations are now conditional and only appended when the cited URL is one of the retrieved supporting sources
 - widget conversations now run asynchronously through `SupportPipelineJob` with Turbo Streams instead of blocking on the request cycle
+- widget shows a loading spinner while the job runs, updates via ActionCable broadcast (Turbo Stream) when done
+- a Stimulus polling fallback fires every 3 seconds via `GET /widget/tickets/:id/chat` in case the WebSocket broadcast is missed
+- `kamal-proxy response_timeout` is set to `3600` to prevent idle WebSocket disconnections
 - company landing pages now embed the support widget as a bottom-right floating shell instead of forcing users onto a separate widget-only page
 - `SupportPipeline` now enforces confidence guardrails instead of only recording confidence values
 - delivery fallback replies now describe verified state only and no longer claim an asset resend happened without an explicit simulated action
@@ -59,6 +62,11 @@ The core runtime is in place:
 - manual-entry chunk indexing now lives in a dedicated `Knowledge::ManualEntryIndexer` service rather than hidden model logic
 - public-knowledge retrieval now stays generic in code while preferring curated manual entries over noisy imported chunks
 - demo deployment wiring now exists through Kamal with a single-server SQLite production path and persistent `storage/` volume mounting
+- agent prompts are extracted into frozen constants in dedicated `Triage::Prompts` and `Specialist::Prompts` modules
+- shared normalizer helpers (`normalized_category`, `normalized_priority`, etc.) live in `Agents::Shared::Normalizers`
+- `Triage::KnowledgeAnswerer` is a dedicated service for LLM knowledge synthesis and grounding validation
+- `RubyLLM.configure` runs once at boot in an initializer; `use_new_acts_as = true` silences the legacy API deprecation warning
+- 80-question regression sweep has been run against production; knowledge seeds updated based on results
 
 ### Implemented data model
 
@@ -156,29 +164,20 @@ The most recently verified flows:
 - the target server is reachable over SSH and has Docker available
 - the only deploy blocker seen in this session was GHCR authentication during `docker login`
 
-Most recently re-run tests:
-
-- command: `bin/rails test test/integration/support_os_flow_test.rb`
-- result: `20 runs, 278 assertions, 0 failures, 0 errors, 0 skips`
-
 Latest full-suite result:
 
-- command: `PARALLEL_WORKERS=1 bin/rails test`
-- result: `60 runs, 498 assertions, 0 failures, 0 errors, 0 skips`
+- command: `bin/rails test`
+- result: `79 runs, 628 assertions, 0 failures, 0 errors, 0 skips`
 
 ### Deployment state
 
-Current repo deploy wiring:
+Production is live and verified at `http://147.135.78.29`.
 
-- `config/deploy.yml` exists for Kamal
-- production SQLite paths are now explicitly configured in `config/database.yml`
-- `.kamal/secrets` now provides `RAILS_MASTER_KEY` from `config/master.key`
-- the server-side persistent storage path `/home/debian/apps/support_os/storage` has already been created
-
-Current blocker:
-
-- the last attempted `kamal setup` reached the server successfully but failed on `docker login ghcr.io`
-- this means the remaining issue is registry authentication, not the VPS or SSH path
+- Kamal deploys to a single DigitalOcean server via `kamal deploy`
+- SQLite with persistent `/home/debian/apps/support_os/storage` volume
+- `kamal proxy reboot` is required after `response_timeout` changes in `config/deploy.yml`
+- registry: `ghcr.io/lebedevilya/support_os` (GHCR, authenticated)
+- polling fallback verified end-to-end: ticket created via test API, first poll returned the reply Turbo Stream within 3 seconds
 
 ## What Matches The Plan
 
@@ -211,232 +210,95 @@ These planned requirements are already satisfied or mostly satisfied:
 
 ## What Is Still Weak Or Incomplete
 
-These are the main gaps between the current code and the intended demo quality.
+### 1. Human operator UX is thin
 
-### 1. Human support remains visually clear for customers, but operator workflow is still thin
+- the customer-facing waiting state is clear inside the widget
+- but the internal side after manual takeover is still minimal: no assignee model, no inbox split between AI-handled and human-owned tickets, no strong work queue behavior
+- the ownership model is correct, but the operator UX stops short of a believable support console
 
-Current problem:
+### 2. Imported knowledge is noisy
 
-- the customer-facing waiting state is now much clearer inside the widget
-- but the internal human-support side is still thin after takeover: there is still no explicit assignee model, inbox split, or stronger human work queue behavior
+- curated `Knowledge::ManualEntry` records handle the most important FAQ paths well
+- but imported public knowledge still has low-signal chunks in places; source titles are sometimes ugly or duplicative
+- no curation pass has been done over imported pages; the curated layer carries the weight
 
-Why it matters:
+### 3. Tag taxonomy is shallow
 
-- the ownership model is correct, but the operator UX still stops short of a believable support console
-
-### 2. Knowledge quality is still only partially curated
-
-Current problem:
-
-- curated manual entries now exist for key FAQs, which is a major improvement
-- but imported public knowledge is still noisy in places and source titles are still ugly or low-signal
-- retrieval is better, but there is still no explicit source-quality curation pass over imported pages and chunks
-
-Why it matters:
-
-- the system will only feel trustworthy if the knowledge it uses is obviously clean and intentional
-- right now the curated layer exists, but the imported layer still needs cleanup to avoid dragging answer quality down
-
-### 3. Automatic tagging is still basic
-
-Current problem:
-
-- tags are now persisted and surfaced, but the automatic assignment is still shallow
-- some fallback tags are inferred from category/status/rule names rather than a stronger controlled taxonomy
-- there is no admin UX yet for consolidating near-duplicate tags or auditing low-quality tag assignment
-
-Why it matters:
-
-- tags are only useful if they stay clean
-- without curation, the tag layer can drift into noisy metadata instead of becoming a durable operational tool
-
-### 4. Triage still has one coarse fallback path
-
-Current problem:
-
-- deterministic rule-based routing and rule-based knowledge blocking are now DB-backed
-- the remaining fallback path is still broad: if no support rule, no safe public-knowledge answer, and no LLM route applies, triage escalates with a generic "outside the demo cases" outcome
-
-Why it matters:
-
-- this is acceptable for the deadline, but it still leaves the non-LLM fallback story coarse
-- if time permits, the remaining fallback could become more explicit or better-scoped
+- tags are persisted and surfaced in the inbox, but auto-assignment is still basic
+- some fallback tags come from category/status/rule names rather than a controlled taxonomy
+- no admin workflow exists for merging near-duplicate tags; they accumulate silently
 
 ## Recommended Next Steps
 
-Do these in this order.
+### 1. Polish the human support console
 
-### Step 1. Finish deployment
+- consider an explicit inbox split or queue view for human-owned tickets
+- improve trace/ticket labeling so the operator can instantly see what automation already did vs. what is now manual
 
-Goal:
+### 2. Curate imported knowledge
 
-- get the demo reachable on the existing server
+- review imported chunks for both companies
+- remove low-value or duplicative chunks via MotorAdmin or a seed cleanup pass
+- make sure all high-value FAQ paths have a curated `Knowledge::ManualEntry` counterpart
 
-Changes:
+### 3. Tighten tag quality
 
-- complete GHCR authentication with a token that can publish `ghcr.io/lebedevilya/support_os`
-- run `kamal setup`
-- verify `/up`, the company pages, widget flow, and a seeded specialist action case in production
+- expose tags on ticket detail more prominently
+- tighten the LLM tag prompt so output stays within a controlled set
+- consider a simple admin merge/consolidate workflow in MotorAdmin
 
-Expected outcome:
-
-- the reviewer can access the deployed demo instead of only running it locally
-
-### Step 2. Tighten knowledge quality
-
-Goal:
-
-- make public-knowledge answers more consistently useful
-
-Changes:
-
-- review imported chunks for the seeded companies
-- remove obvious low-value or duplicative chunks
-- clean up weak source titles and noisy pages where possible
-- make sure the most important public questions map cleanly to curated manual entries or strong source pages
-
-Expected outcome:
-
-- triage knowledge answers feel more intentional and less noisy
-
-### Step 3. Improve tag operations
-
-Goal:
-
-- make tags a real support ops primitive instead of passive metadata
-
-Changes:
-
-- expose tags clearly on ticket detail
-- add a simple admin workflow for merging or cleaning tags
-- tighten the LLM prompt and fallback taxonomy so tag output stays stable
-
-Expected outcome:
-
-- the reviewer sees a support OS, not just a chat demo
-
-### Step 4. Finish the human support console
-
-Goal:
-
-- make the manually owned ticket flow feel more like an actual support tool internally
-
-Changes:
-
-- add stronger queue behavior for human-owned tickets
-- consider an explicit "assigned/unassigned" or "owned by support" distinction if that helps the demo
-- keep improving trace/ticket labeling so the operator can instantly tell what automation already did and what is now manual
-
-Expected outcome:
-
-- the reviewer sees a believable human-support workflow after escalation instead of just a reply box
-
-### Step 5. Add guided showcase polish where it helps the walkthrough
-
-Changes:
-
-- keep the showcase docs and seeded scenarios aligned
-- consider adding a lightweight scenario picker or index page outside the widget if the reviewer needs a more guided start
-- curate MotorAdmin around `Knowledge::` models and `SupportRule`
-
-Expected outcome:
-
-- the walkthrough stays reliable without hiding the freeform product shape
-
-### Step 4. Tighten knowledge-answer boundaries
-
-Goal:
-
-- stop answering from weak or irrelevant retrieved content even when retrieval returns a chunk
-
-Changes:
+### 4. Tighten knowledge-answer boundaries (optional)
 
 - reconsider whether `KNOWLEDGE_MIN_SCORE = 2` is strong enough
-- avoid public-knowledge answers when the retrieved content does not actually answer the question
-- prefer specialist or escalation over vague “not found in public info” answers when retrieval confidence is weak
-- add tests around pricing, edge-case policy questions, and irrelevant legal-page retrieval
-
-Expected outcome:
-
-- triage feels more trustworthy and less eager
-
-### Optional cleanup. Reduce remaining hardcoded triage heuristics
-
-Goal:
-
-- tighten the remaining coarse fallback behavior if there is still time
-
-Changes:
-
-- consider whether the generic non-LLM fallback escalation should be split into a few clearer bounded cases
-- consider whether more reviewer-facing explanation should be stored when the fallback path is used
-
-Expected outcome:
-
-- a cleaner operating-layer story, but this is lower priority than guardrails, honesty, and UI
+- prefer specialist or escalation over weak “not found in public info” answers when retrieval confidence is low
 
 ## Suggested Immediate Execution Plan
 
 If resuming next session, start here:
 
-1. Link `ToolCall` records to `AgentRun` consistently
-2. Tighten the ticket/trace UI so linked vs unlinked operational steps are obvious
-3. Add an explicit `resend_asset` tool path only if the demo truly needs to claim resend behavior
-4. Tighten knowledge-answer boundaries for weak or irrelevant retrieval hits
-5. Add widget demo prompts and suggested emails
-6. Curate MotorAdmin around `Knowledge::` models and `SupportRule`
-7. Run `rbenv exec bundle exec bin/rails test`
+1. Verify the live demo flows end-to-end: widget, specialist tool path, escalation, human reply
+2. Polish the human-owned ticket UX in the inbox
+3. Run a curated knowledge cleanup pass for both companies
+4. Run `bin/rails test` to confirm 79 runs still pass
 
 ## Key Files
 
 These are the main files to inspect first next session:
 
-- `PROPOSAL.md`
-- `TECH.md`
-- `PROGRESS.md`
+- `OVERVIEW.md` — concise orientation guide
+- `PROPOSAL.md` — product framing and goals
+- `TECH.md` — technical design
+- `PROGRESS.md` — this file
 - `db/seeds.rb`
 - `app/services/support_pipeline.rb`
 - `app/services/agents/triage_agent.rb`
+- `app/services/agents/triage/prompts.rb`
+- `app/services/agents/triage/knowledge_answerer.rb`
 - `app/services/agents/specialist_agent.rb`
+- `app/services/agents/specialist/prompts.rb`
+- `app/services/agents/shared/normalizers.rb`
 - `app/services/support_rule_matcher.rb`
 - `app/models/support_rule.rb`
 - `app/views/tickets/index.html.erb`
 - `app/views/tickets/show.html.erb`
 - `app/views/traces/show.html.erb`
-- `app/services/public_knowledge/importer.rb`
-- `app/services/public_knowledge/link_discoverer.rb`
-- `app/services/public_knowledge/site_importer.rb`
-- `app/services/public_knowledge/chunker.rb`
 - `app/services/public_knowledge/retriever.rb`
 - `app/services/llm/client.rb`
+- `config/initializers/ruby_llm.rb`
 - `app/jobs/support_pipeline_job.rb`
-- `app/controllers/companies_controller.rb`
-- `app/views/companies/show.html.erb`
-- `app/views/widget/tickets/new.html.erb`
-- `app/views/widget/tickets/_form.html.erb`
 - `app/views/widget/tickets/_chat.html.erb`
-- `app/views/widget/tickets/_embedded_shell.html.erb`
-- `app/views/widget/messages/create.turbo_stream.erb`
-- `app/views/widget/tickets/close.turbo_stream.erb`
+- `app/javascript/controllers/processing_poll_controller.js`
+- `config/deploy.yml`
 - `test/services/support_pipeline_test.rb`
-- `test/services/support_pipeline_support_rule_test.rb`
-- `test/services/support_rule_matcher_test.rb`
-- `test/services/public_knowledge/importer_test.rb`
-- `test/services/public_knowledge/link_discoverer_test.rb`
-- `test/services/public_knowledge/site_importer_test.rb`
-- `test/services/public_knowledge/retriever_test.rb`
-- `test/services/public_knowledge/support_pipeline_public_answer_test.rb`
 - `test/integration/support_os_flow_test.rb`
 
 ## Environment Notes
 
-- intended Ruby version: `3.4.1`
-- verify with `rbenv`
-- use `rbenv exec bundle exec bin/rails test`, not plain `bin/rails test`
+- Ruby `3.4.1` — verify with `rbenv`
 - use `bin/dev` during UI work so `tailwindcss:watch` keeps `app/assets/builds/tailwind.css` up to date
-- `db:seed` now performs live site imports, so network access is required for realistic knowledge seeding
-- after the latest rule-system change, `db:migrate` is required for `support_rules.blocks_public_knowledge`
-- SQLite can throw `database is locked` if multiple test files are run in parallel from separate processes; serial runs are reliable
+- `db:seed` performs live site imports; network access is required for realistic knowledge seeding
+- SQLite can throw `database is locked` under parallel test workers; `bin/rails test` (single-process) is reliable
+- deploy: `kamal deploy` then `kamal proxy reboot` if `config/deploy.yml` proxy settings changed
 
 ## Definition Of "Good Enough To Submit"
 
