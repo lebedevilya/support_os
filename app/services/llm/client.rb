@@ -7,7 +7,7 @@ module LLM
     DEFAULT_PROVIDER = :openai
 
     def self.build_from_env
-      api_key = credentials_api_key.to_s.strip
+      api_key = Rails.application.credentials.open_ai.api_key.to_s.strip
       return if api_key.empty?
 
       new(api_key: api_key)
@@ -33,19 +33,7 @@ module LLM
 
     private
 
-    def self.credentials_api_key
-      open_ai = Rails.application.credentials.respond_to?(:open_ai) ? Rails.application.credentials.open_ai : nil
-      return open_ai.api_key if open_ai.respond_to?(:api_key)
-      return open_ai[:api_key] if open_ai.respond_to?(:[])
-
-      nil
-    end
-
     def build_chat(model:, provider:, api_key:)
-      RubyLLM.configure do |config|
-        config.openai_api_key = api_key
-      end
-
       RubyLLM.chat(model: model, provider: provider)
     end
 

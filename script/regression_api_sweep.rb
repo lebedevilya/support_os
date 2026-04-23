@@ -14,51 +14,49 @@ OPENERS = [
   "I need some help"
 ].freeze
 
-# CASES V1 — original 40 cases, all passing as of sweep on 2026-04-23
-# CASES = [
-#   "How much is the price per photo?",
-#   "What is included in the $4.99 option?",
-#   "What is included in the $7.99 option?",
-#   "How long does the process take?",
-#   "Do you offer a money-back guarantee?",
-#   "What happens if my photo gets rejected?",
-#   "What countries do you support?",
-#   "Can you make a Canada passport photo?",
-#   "Can you make a UK visa photo?",
-#   "Do I need a professional camera?",
-#   "Do I need special lighting?",
-#   "Can I print the photo at home?",
-#   "Do I get a digital file or a PDF?",
-#   "How many photos are included in the print PDF?",
-#   "Will official agencies accept the photo?",
-#   "Do you delete uploaded photos?",
-#   "How long do you keep my photo?",
-#   "How can I contact support?",
-#   "Is payment secure?",
-#   "Can I upload a selfie from my phone?",
-#   "Do you support US passport photos?",
-#   "Do you support Germany passport photos?",
-#   "Can I use a normal selfie?",
-#   "Do I need to travel to a photo studio?",
-#   "Will I get a refund if an embassy rejects my photo?",
-#   "Is the PDF print-ready?",
-#   "Does the print version include cutting guides?",
-#   "Do you support India passport photos?",
-#   "Can I use my computer webcam?",
-#   "Do you have unlimited retakes?",
-#   "Can I make photo for Russian passport?",
-#   "Can you help me bake cookies?",
-#   "How much is the price for a fishing rod?",
-#   "Do you sell bicycle tires?",
-#   "Write me a poem about bananas.",
-#   "What is the weather in Tokyo today?",
-#   "Can you renew my passport for me?",
-#   "Do you guarantee embassy acceptance in every case?",
-#   "Can I use the service without paying?",
-#   "Can you email my photo to the embassy directly?"
-# ].freeze
-
 CASES = [
+  # initial 40 dialogues (v1)
+  "How much is the price per photo?",
+  "What is included in the $4.99 option?",
+  "What is included in the $7.99 option?",
+  "How long does the process take?",
+  "Do you offer a money-back guarantee?",
+  "What happens if my photo gets rejected?",
+  "What countries do you spport?",
+  "Can you make a Canada passport photo?",
+  "Can you make a UK visa photo?",
+  "Do I need a professional camera?",
+  "Do I need special lighting?",
+  "Can I print the photo at home?",
+  "Do I get a digital file or a PDF?",
+  "How many photos are included in the print PDF?",
+  "Will official agencies accept the photo?",
+  "Do you delete uploaded photos?",
+  "How long do you keep my photo?",
+  "How can I contact support?",
+  "Is payment secure?",
+  "Can I upload a selfie from my phone?",
+  "Do you support US passport photos?",
+  "Do you support Germany passport photos?",
+  "Can I use a normal selfie?",
+  "Do I need to travel to a photo studio?",
+  "Will I get a refund if an embassy rejects my photo?",
+  "Is the PDF print-ready?",
+  "Does the print version include cutting guides?",
+  "Do you support India passport photos?",
+  "Can I use my computer webcam?",
+  "Do you have unlimited retakes?",
+  "Can I make photo for Russian passport?",
+  "Can you help me bake cookies?",
+  "How much is the price for a fishing rod?",
+  "Do you sell bicycle tires?",
+  "Write me a poem about bananas.",
+  "What is the weather in Tokyo today?",
+  "Can you renew my passport for me?",
+  "Do you guarantee embassy acceptance in every case?",
+  "Can I use the service without paying?",
+  "Can you email my photo to the embassy directly?",
+
   # Service-cannot-perform variants
   "Can you submit my visa application for me?",
   "Can you book a passport photo appointment at my local post office?",
@@ -148,7 +146,7 @@ def wait_for_assistant(ticket_id, previous_assistant_count, timeout: 90)
 
     raise "Timed out waiting for assistant on ticket #{ticket_id}" if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
 
-    sleep 2
+    sleep 1
   end
 end
 
