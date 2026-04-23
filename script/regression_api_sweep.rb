@@ -14,8 +14,8 @@ OPENERS = [
   "I need some help"
 ].freeze
 
-# CASES_V1 — original 40 cases, all passing as of sweep on 2026-04-23
-CASES_V1 = [
+# CASES V1 — original 40 cases, all passing as of sweep on 2026-04-23
+CASES = [
   "How much is the price per photo?",
   "What is included in the $4.99 option?",
   "What is included in the $7.99 option?",

@@ -339,6 +339,7 @@ module Agents
           - off-topic or general-assistant requests (cooking, weather, shopping, anything unrelated to passport or visa photos) should route to clarify; the reply must name the company by name and briefly describe what support it actually provides
           - broad product questions answerable from public website knowledge should route to knowledge_answer
           - case-specific operational requests should route to specialist
+          - questions about whether the company can make, create, or prepare a passport or visa photo for a specific country should use question_type countries and route to knowledge_answer; these are product questions, not government-process requests
           - requests for services this company cannot perform — such as renewing passports, submitting visa or passport applications, delivering or emailing photos directly to embassies or government agencies, or any other government-process action — have question_type service_cannot_perform and route to clarify; the reply must name the company by name and explain that it provides AI photo preparation only, not government services
           - distinguish a general policy question about refunds or guarantees from an active customer dispute
           - extract the country into the country field only when the customer explicitly names a real country or territory (e.g. "France", "Japan", "Brazil"); if no specific country name appears in the message, leave country empty
