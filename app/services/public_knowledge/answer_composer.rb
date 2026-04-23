@@ -1,6 +1,5 @@
 module PublicKnowledge
   class AnswerComposer
-    YES_NO_PREFIXES = /\A\s*(can|could|do|does|is|are|will|would)\b/i
     STOPWORDS = %w[
       a an and are can could do does for get help here how i in it know me my no of
       on or please really service services sure the this to use using we what when
@@ -37,33 +36,19 @@ module PublicKnowledge
     end
 
     def call
-      "#{opening} #{chunk_text} Source: #{source_label}."
+      res = chunk_text
+      res += " " + source_label if source_label
+      res
     end
 
     private
-
-    def opening
-      return "Yes, you can." if yes_no_question?
-
-      "Here’s what I found."
-    end
-
-    def yes_no_question?
-      @question.match?(YES_NO_PREFIXES)
-    end
 
     def chunk_text
       best_sentence.to_s.strip
     end
 
     def source_label
-      if @chunk.source
-        [ @chunk.source.title.presence, @chunk.source.url.presence ].compact.join(" — ")
-      elsif @chunk.manual_entry
-        @chunk.manual_entry.title
-      else
-        "public knowledge"
-      end
+      [ @chunk.source.title.presence, @chunk.source.url.presence ].compact.join(" — ") if @chunk.source
     end
 
     def best_sentence
