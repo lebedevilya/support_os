@@ -16,6 +16,7 @@ Rails.application.routes.draw do
       member do
         patch :close
         patch :handoff
+        get :chat
       end
       resources :messages, only: [ :create ]
     end

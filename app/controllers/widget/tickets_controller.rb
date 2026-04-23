@@ -40,6 +40,15 @@ module Widget
       render :create, status: :ok
     end
 
+    def chat
+      @ticket = Ticket.find(params[:id])
+      render turbo_stream: turbo_stream.replace(
+        dom_id(@ticket, :chat),
+        partial: "widget/tickets/chat",
+        locals: { ticket: @ticket }
+      )
+    end
+
     def close
       @ticket = Ticket.find(params[:id])
       @ticket.update!(status: "resolved", human_handoff_available: false)
