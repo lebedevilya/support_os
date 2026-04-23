@@ -154,7 +154,6 @@ module PublicKnowledge
       return 0 unless substantive_match?(matched_terms, phrase_score)
       return 0 if mismatched_specific_request?(raw_focus_terms, matched_terms)
       return 0 if privacy_query? && !privacy_match?(content_terms, title_terms)
-      return 0 if !privacy_query? && legal_source_chunk?(chunk)
       return 0 if specific_country_query? && !specific_country_match?(content_terms, title_terms)
 
       content_score + title_score + phrase_score + title_phrase_score + specific_topic_score + manual_bonus
@@ -288,9 +287,5 @@ module PublicKnowledge
       end.uniq
     end
 
-    def legal_source_chunk?(chunk)
-      url = chunk.source&.url.to_s.downcase
-      url.include?("/privacy") || url.include?("/terms") || url.include?("/legal")
-    end
   end
 end

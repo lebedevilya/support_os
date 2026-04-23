@@ -80,7 +80,7 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
       [ "user", "How long does it take?" ]
     ], knowledge_call[:context][:message_history]
     assert_includes knowledge_call[:prompt], "do not include URLs or citation text directly in reply"
-    assert_includes knowledge_call[:prompt], "set cited_source_url only when one provided source page directly supports the answer"
+    assert_includes knowledge_call[:prompt], "only set cited_source_url when the source title and content are specifically about the topic the customer asked about"
   end
 
   test "uses the llm to compose a yes-no faq answer from public knowledge" do

@@ -145,14 +145,14 @@ module Agents
           - answer naturally and concisely
           - if the question is yes/no and the knowledge supports it, answer directly
           - do not include URLs or citation text directly in reply
-          - set cited_source_url only when one provided source page directly supports the answer
+          - only set cited_source_url when the source title and content are specifically about the topic the customer asked about; if the source title is a homepage, general landing page, legal document, or clearly about a different topic, leave cited_source_url blank
           - leave cited_source_url blank when the provided knowledge does not directly answer the question
-          - never cite a generic, unrelated, or fallback page just to add a link
           - do not invent policies, tools, account data, or operational actions
           - do not claim uncertainty if the provided knowledge is sufficient
-          - if you cite a source, factual details in the reply must be grounded in the provided chunks
+          - if you cite a source, every factual claim in the reply must be grounded in that source's chunk content
           - do not add any timelines, response times, contact addresses, email addresses, or procedural steps that are not explicitly stated word-for-word in the provided chunks
           - if a policy exists but the chunks do not provide specific details such as numbers, timeframes, or contact info, state only what the chunks say and omit the missing specifics entirely
+          - before using a chunk, assess whether its source is relevant to the question: a chunk from a privacy policy, terms of service, or legal document should only be used if the customer is explicitly asking about data privacy, data deletion, data retention, or legal terms; for any other question type, treat those chunks as irrelevant
           - if the provided chunks do not directly and sufficiently answer the customer's question, set reply to an empty string and set confidence below 0.3
         PROMPT
         context: {
@@ -172,7 +172,7 @@ module Agents
       )
 
       return nil if response[:reply].to_s.strip.empty?
-      return fallback_knowledge_answer(matches.first.chunk) if unsupported_knowledge_reply?(response, matches)
+      return nil if unsupported_knowledge_reply?(response, matches)
 
       {
         source: "public_knowledge_llm",
@@ -210,6 +210,7 @@ module Agents
     end
 
     def standard_format_country_answer(intent_result = nil)
+      return if intent_result && intent_result[:question_type].to_s != "countries"
       return unless passport_photo_country_question?(intent_result)
       return if supported_country_question?(intent_result)
 
@@ -296,6 +297,8 @@ module Agents
           - unsupported operational requests should use clarify with a reply that names the company by name and explains what it actually does
           - never act like a general assistant for poems, recipes, weather, shopping, or government processing tasks
           - never claim the company can renew passports, submit applications, or email photos directly to embassies unless the provided context explicitly says so
+          - never invent phone numbers, email addresses, business hours, response times, or specific operational procedures that are not present in the provided context; if asked about these, route to clarify and direct the customer to the company website
+          - never claim the company supports a product category it does not offer (driving licences, ID cards, NEXUS, Global Entry) unless the context explicitly confirms this
           - do not offer human handoff from this step; explicit human requests are handled separately before triage
           - if the request mentions embassy rejection, government rejection, or a disputed refund, keep the reply neutral and route as specialist only when the message is otherwise actionable
         PROMPT

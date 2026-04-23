@@ -134,9 +134,9 @@ module Agents
         }
       else
         handoff_offer_result(
-          reason: "No deployment record was found for the provisioning request.",
-          reply: "I could not safely verify the deployment status automatically. If you want, I can connect you with a human specialist.",
-          summary: "Technical request requires human review because no deployment record was found in the demo data.",
+          reason: "No matching record was found for this request.",
+          reply: "I could not safely verify your request automatically. If you want, I can connect you with a human specialist.",
+          summary: "Technical request requires human review because no matching record was found.",
           tags: %w[technical human-review missing-record]
         )
       end
