@@ -168,17 +168,17 @@ end
   {
     company: aipassportphoto,
     title: "Pricing",
-    content: "AI Passport Photo offers a $4.99 Image Only option and a $7.99 Image + Print PDF option."
+    content: "AI Passport Photo price is $4.99 to $7.99. The cost per photo depends on the package selected at checkout: the $4.99 Image Only option includes a high-resolution digital file, and the $7.99 Image + Print PDF option adds a print-ready PDF with 4 photos and cutting guides. Every order includes unlimited free retakes and a 30-day money-back guarantee if the photo is rejected by any official passport office, embassy, or government agency."
   },
   {
     company: aipassportphoto,
     title: "Image Only package",
-    content: "The $4.99 Image Only option includes a high-resolution digital image, 300 DPI quality, and a file ready for upload."
+    content: "The $4.99 Image Only option includes a high-resolution digital image, 300 DPI quality, and a file ready for upload. This is the lower-cost option if you only need a digital file."
   },
   {
     company: aipassportphoto,
     title: "Image plus Print PDF package",
-    content: "The $7.99 Image + Print PDF option includes a high-resolution digital image, 300 DPI quality, and a print-ready PDF with 4 photos and cutting guides."
+    content: "The $7.99 Image + Print PDF option includes a high-resolution digital image, 300 DPI quality, and a print-ready PDF with 4 photos and cutting guides. This option costs more but is useful for printing at home or at a print shop."
   },
   {
     company: aipassportphoto,
