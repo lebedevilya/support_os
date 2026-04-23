@@ -43,6 +43,8 @@ module Agents
 
         specialist_result = intent_specialist_result(intent_result)
         return specialist_result if specialist_result
+
+        return llm_triage
       end
 
       return default_clarify_result if generic_support_opener?
@@ -58,8 +60,6 @@ module Agents
 
       blocker_fallback = blocked_request_handoff_result
       return blocker_fallback if blocker_fallback
-
-      return llm_triage if @llm_client
 
       default_clarify_result
     end
@@ -153,6 +153,7 @@ module Agents
           - do not add any timelines, response times, contact addresses, email addresses, or procedural steps that are not explicitly stated word-for-word in the provided chunks
           - if a policy exists but the chunks do not provide specific details such as numbers, timeframes, or contact info, state only what the chunks say and omit the missing specifics entirely
           - before using a chunk, assess whether its source is relevant to the question: a chunk from a privacy policy, terms of service, or legal document should only be used if the customer is explicitly asking about data privacy, data deletion, data retention, or legal terms; for any other question type, treat those chunks as irrelevant
+          - do not claim the company supports document types or product categories not explicitly mentioned in the provided chunks; if the chunks describe passport and visa photo services, do not extend this to ID cards, driving licences, NEXUS, Global Entry, or other document types
           - if the provided chunks do not directly and sufficiently answer the customer's question, set reply to an empty string and set confidence below 0.3
         PROMPT
         context: {

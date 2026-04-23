@@ -213,10 +213,10 @@ class SupportPipelinePublicAnswerTest < ActiveSupport::TestCase
         tags: [ "contact", "knowledge" ]
       },
       {
-        reply: "We don’t have the office location publicly listed. Please contact support@aipassportphoto.co for help.",
+        reply: "Our company is registered as Picanha L.L.C-FZ in the United Arab Emirates.",
         confidence: 0.9,
         reasoning_summary: "Answered from the contact page.",
-        cited_source_url: nil
+        cited_source_url: "https://www.aipassportphoto.co/contact"
       }
     )
 
