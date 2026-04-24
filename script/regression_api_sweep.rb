@@ -3,9 +3,11 @@ require "json"
 require "securerandom"
 require "uri"
 
-HOST = ENV.fetch("REGRESSION_API_HOST", "http://147.135.78.29")
-TOKEN = Rails.application.credentials.dig(:regression_api, :token)
-COMPANY = ENV.fetch("REGRESSION_API_COMPANY", "aipassportphoto")
+HOST        = ENV.fetch("REGRESSION_API_HOST", "https://supportos.ilyalebe.dev")
+TOKEN       = Rails.application.credentials.dig(:regression_api, :token)
+COMPANY     = ENV.fetch("REGRESSION_API_COMPANY", "aipassportphoto")
+CONCURRENCY = ENV.fetch("REGRESSION_CONCURRENCY", "10").to_i
+
 OPENERS = [
   "Hi",
   "Hello, can you help?",
@@ -109,24 +111,79 @@ CASES = [
   "Can you make a photo for a green card application?",
   "Can you make a passport photo for my baby?",
   "Do you support NEXUS card or Global Entry photos?",
-  "Can I use the same photo for a UK passport and a UK driving licence?"
+  "Can I use the same photo for a UK passport and a UK driving licence?",
+
+  # v2: additional 40 cases
+  # Photo appearance requirements
+  "Can I wear a hat in my passport photo?",
+  "Does the photo need to be in color?",
+  "Can I have my eyes closed in the photo?",
+  "Can I use a black and white photo?",
+  "My photo has shadows on the background, is that acceptable?",
+  "Do I need to remove earrings for my passport photo?",
+  "Can I have a beard in my passport photo?",
+  "Can I wear makeup in my passport photo?",
+
+  # More country coverage
+  "Do you support Swiss passport photos?",
+  "Can I make a photo for an Italian passport?",
+  "What about a Spanish visa photo?",
+  "Do you support Korean passport photos?",
+  "Can you make a photo for a Mexican passport?",
+  "Do you support South African passport photos?",
+  "Can I make a photo for a New Zealand passport?",
+  "Do you support UAE visa photos?",
+
+  # Pricing and payment edge cases
+  "Is there a free trial?",
+  "Do you offer discounts for bulk orders?",
+  "Can I pay with PayPal?",
+  "Do you accept cryptocurrency?",
+  "Can I get an invoice for my order?",
+  "What currencies do you accept?",
+
+  # Technical / product detail
+  "What resolution is the final photo?",
+  "Can I download the photo multiple times?",
+  "Can I share my download link with someone else?",
+  "What happens if the AI cannot process my photo?",
+  "How do I download my photo on an iPhone?",
+
+  # Delivery and account recovery
+  "My email confirmation never arrived",
+  "I accidentally deleted my download email, can you resend it?",
+  "Can you resend my photo to a different email address?",
+  "I ordered the wrong package, can I switch?",
+
+  # Compliance and acceptance stress
+  "Do you guarantee the photo will be accepted by TSA?",
+  "Is your service approved by the US State Department?",
+  "What if I changed my appearance since taking the photo?",
+  "Can I take a photo wearing a religious head covering?",
+
+  # Completely out-of-scope
+  "What is the current passport application fee for the US?",
+  "How do I renew my passport online?",
+  "Where is the nearest passport office to me?",
+  "Can you translate my passport application form?"
 ].freeze
 
 def request(method, path, body = nil)
   uri = URI.join(HOST, path)
   http = Net::HTTP.new(uri.host, uri.port)
+  http.use_ssl = uri.scheme == "https"
   request_class = case method
   when :get then Net::HTTP::Get
   when :post then Net::HTTP::Post
   else raise "Unsupported method: #{method}"
   end
 
-  request = request_class.new(uri)
-  request["Authorization"] = "Bearer #{TOKEN}"
-  request["Content-Type"] = "application/json"
-  request.body = JSON.dump(body) if body
+  req = request_class.new(uri)
+  req["Authorization"] = "Bearer #{TOKEN}"
+  req["Content-Type"] = "application/json"
+  req.body = JSON.dump(body) if body
 
-  response = http.request(request)
+  response = http.request(req)
   raise "#{method.upcase} #{path} failed: #{response.code} #{response.body}" unless response.code.to_i.between?(200, 299)
 
   JSON.parse(response.body)
@@ -141,7 +198,7 @@ def wait_for_assistant(ticket_id, previous_assistant_count, timeout: 90)
 
   loop do
     payload = ticket_payload(request(:get, "/widget/test_api/tickets/#{ticket_id}"))
-    assistant_messages = payload.fetch("messages").select { |message| message["role"] == "assistant" }
+    assistant_messages = payload.fetch("messages").select { |m| m["role"] == "assistant" }
     return [payload, assistant_messages.last] if assistant_messages.size > previous_assistant_count
 
     raise "Timed out waiting for assistant on ticket #{ticket_id}" if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
@@ -150,32 +207,17 @@ def wait_for_assistant(ticket_id, previous_assistant_count, timeout: 90)
   end
 end
 
-unless TOKEN.present?
-  abort "Missing regression_api.token in Rails credentials"
-end
-
-results = CASES.each_with_index.map do |question, index|
-  print('.')
+def run_case(question, index)
   opener = OPENERS[index % OPENERS.length]
-  email = "qa+#{Time.now.to_i}-#{index}-#{SecureRandom.hex(4)}@example.com"
+  email  = "qa+#{Time.now.to_i}-#{index}-#{SecureRandom.hex(4)}@example.com"
+  ticket_id = nil
+  opener_reply = nil
 
-  created = request(
-    :post,
-    "/widget/test_api/tickets",
-    company_slug: COMPANY,
-    email: email,
-    content: opener
-  )
-
+  created = request(:post, "/widget/test_api/tickets", company_slug: COMPANY, email: email, content: opener)
   ticket_id = ticket_payload(created).fetch("id")
-  opener_payload, opener_reply = wait_for_assistant(ticket_id, 0)
+  _opener_payload, opener_reply = wait_for_assistant(ticket_id, 0)
 
-  request(
-    :post,
-    "/widget/test_api/tickets/#{ticket_id}/messages",
-    content: question
-  )
-
+  request(:post, "/widget/test_api/tickets/#{ticket_id}/messages", content: question)
   answer_payload, answer_reply = wait_for_assistant(ticket_id, 1)
   request(:post, "/widget/test_api/tickets/#{ticket_id}/close")
 
@@ -198,4 +240,34 @@ rescue => error
   }
 end
 
-puts JSON.pretty_generate(results)
+unless TOKEN.present?
+  abort "Missing regression_api.token in Rails credentials"
+end
+
+queue   = Queue.new
+CASES.each_with_index { |q, i| queue << [q, i] }
+
+mutex   = Mutex.new
+results = []
+$stderr.print "Running #{CASES.size} cases with #{CONCURRENCY} threads"
+
+workers = CONCURRENCY.times.map do
+  Thread.new do
+    until queue.empty?
+      item = begin; queue.pop(true); rescue ThreadError; nil; end
+      next unless item
+
+      question, index = item
+      result = run_case(question, index)
+      mutex.synchronize do
+        results << result
+        $stderr.print(result[:error] ? "E" : ".")
+      end
+    end
+  end
+end
+
+workers.each(&:join)
+$stderr.puts "\nDone."
+
+puts JSON.pretty_generate(results.sort_by { |r| CASES.index(r[:question]).to_i })

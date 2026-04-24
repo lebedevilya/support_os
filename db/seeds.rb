@@ -281,6 +281,26 @@ end
     content: "AI Passport Photo can generate photos for passport applications and visa applications. Whether one photo can serve both purposes depends on the requirements of your country's issuing authority. Always verify the specific requirements for each document before submitting."
   },
   {
+    company: aipassportphoto,
+    title: "Payment methods and currency",
+    content: "AI Passport Photo accepts payment by credit and debit card only, processed securely through Stripe. All prices are charged in USD. We do not accept PayPal, cryptocurrency, or any other payment method. There are no bulk discounts or special pricing tiers."
+  },
+  {
+    company: aipassportphoto,
+    title: "Download link validity",
+    content: "Download links for completed photo orders are valid for 7 days from the date of purchase. After 7 days the link expires. The underlying photo file is retained for up to 30 days, so if your link has expired you can contact support to have it resent."
+  },
+  {
+    company: aipassportphoto,
+    title: "Service scope and limitations",
+    content: "AI Passport Photo creates new passport and visa photos from a selfie you upload. We do not check, review, or validate photos that were not created through our service. We do not submit visa or passport applications, book photo appointments, mail physical prints, fill in government forms, or perform any other government processes. If you need any of those services, please contact the relevant authority directly."
+  },
+  {
+    company: aipassportphoto,
+    title: "Countries using the standard format",
+    content: "Countries not individually listed in the country selector all use the Other Standard option, which produces a standard 35x45mm photo accepted by most countries worldwide. This covers Korea, Mexico, South Africa, New Zealand, UAE, Nigeria, and any other country not shown in the list. If your country is not listed, select Other Standard — the photo will meet the standard international format used by those countries."
+  },
+  {
     company: nodes_garden,
     title: "Provisioning lifecycle",
     content: "New nodes.garden deployments move through provisioning, syncing, and healthy states. Provisioning delays can happen while infrastructure boots or while the node catches up to chain state."

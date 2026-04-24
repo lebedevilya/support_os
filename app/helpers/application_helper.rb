@@ -72,6 +72,45 @@ module ApplicationHelper
     action_tools.include?(tool_name) ? "Action completed" : "Lookup tool"
   end
 
+  def pagy_nav(pagy)
+    return "" if pagy.pages <= 1
+
+    base_params = request.query_parameters.except("page")
+    page_url = ->(p) { tickets_path(base_params.merge(page: p)) }
+
+    btn   = "inline-flex h-9 min-w-[2.25rem] items-center justify-center rounded-full px-3 text-sm font-medium transition"
+    active = "#{btn} bg-slate-900 text-white"
+    normal = "#{btn} border border-slate-200 text-slate-700 hover:border-slate-900 hover:bg-slate-900 hover:text-white"
+    muted  = "#{btn} text-slate-400 cursor-default select-none"
+
+    parts = []
+
+    if pagy.prev
+      parts << link_to("←", page_url.(pagy.prev), class: normal, aria: { label: "Previous page" })
+    else
+      parts << content_tag(:span, "←", class: muted, aria: { hidden: true })
+    end
+
+    pagy.series.each do |item|
+      case item
+      when Integer
+        parts << link_to(item.to_s, page_url.(item), class: normal)
+      when String
+        parts << content_tag(:span, item, class: active, aria: { current: "page" })
+      when :gap
+        parts << content_tag(:span, "…", class: muted)
+      end
+    end
+
+    if pagy.next
+      parts << link_to("→", page_url.(pagy.next), class: normal, aria: { label: "Next page" })
+    else
+      parts << content_tag(:span, "→", class: muted, aria: { hidden: true })
+    end
+
+    safe_join(parts, " ")
+  end
+
   def widget_scenarios_for(company)
     return [] unless company
 

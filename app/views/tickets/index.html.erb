@@ -115,6 +115,8 @@
 
   <section class="flex items-center justify-between gap-4 text-sm text-slate-600">
     <p>Page <%= @pagy.page %> of <%= @pagy.pages %></p>
-    <div><%== @pagy.series_nav if @pagy.pages > 1 %></div>
+    <nav class="flex flex-wrap items-center gap-1" aria-label="Pagination">
+      <%= pagy_nav(@pagy) %>
+    </nav>
   </section>
 </div>
