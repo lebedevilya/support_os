@@ -35,8 +35,11 @@ env:
     RAILS_FORCE_SSL: "true"
     RAILS_SERVE_STATIC_FILES: "true"
     SOLID_QUEUE_IN_PUMA: "true"
+    OPENCLAW_HOOKS_URL: "http://172.18.0.1:18789/hooks/agent"
   secret:
     - RAILS_MASTER_KEY
+    - GITHUB_WEBHOOK_SECRET
+    - OPENCLAW_HOOKS_TOKEN
 
 ssh:
   user: debian
