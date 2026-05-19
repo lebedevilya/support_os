@@ -2,6 +2,8 @@ require "test_helper"
 
 module Webhooks
   class GithubPullRequestReviewDispatcherTest < ActiveSupport::TestCase
+    include ActiveJob::TestHelper
+
     test "ignores unsupported repositories" do
       result = dispatch(payload(repository: "other/repo"))
 
@@ -56,7 +58,13 @@ module Webhooks
     attr_reader :calls
 
     def dispatch(payload)
-      GithubPullRequestReviewDispatcher.call(payload, delivery_id: "delivery-123")
+      # The dispatcher enqueues OpenClawAgentHookJob; run it inline so the
+      # AgentHookClient stub still observes the call.
+      result = nil
+      perform_enqueued_jobs do
+        result = GithubPullRequestReviewDispatcher.call(payload, delivery_id: "delivery-123")
+      end
+      result
     end
 
     def payload(action: "opened", repository: "byhuman-ink/byhuman", draft: false)

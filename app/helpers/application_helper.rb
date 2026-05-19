@@ -1,8 +1,6 @@
 require "pagy"
 
 module ApplicationHelper
-  include Pagy::NumericHelpers
-
   URL_PATTERN = %r{https?://[^\s<]+}.freeze
 
   def linked_message_content(text)
@@ -85,20 +83,20 @@ module ApplicationHelper
 
     parts = []
 
-    if pagy.prev
-      parts << link_to("←", page_url.(pagy.prev), class: normal, aria: { label: "Previous page" })
+    if pagy.previous
+      parts << link_to("←", page_url.(pagy.previous), class: normal, aria: { label: "Previous page" })
     else
       parts << content_tag(:span, "←", class: muted, aria: { hidden: true })
     end
 
-    pagy.series.each do |item|
+    pagy_page_series(pagy.page, pagy.pages).each do |item|
       case item
-      when Integer
-        parts << link_to(item.to_s, page_url.(item), class: normal)
-      when String
-        parts << content_tag(:span, item, class: active, aria: { current: "page" })
       when :gap
         parts << content_tag(:span, "…", class: muted)
+      when pagy.page
+        parts << content_tag(:span, item.to_s, class: active, aria: { current: "page" })
+      else
+        parts << link_to(item.to_s, page_url.(item), class: normal)
       end
     end
 
@@ -138,6 +136,21 @@ module ApplicationHelper
   end
 
   private
+
+  # Builds a windowed page series e.g. [1, :gap, 7, 8, 9, :gap, 36]
+  def pagy_page_series(page, pages, window: 2)
+    return (1..pages).to_a if pages <= 7
+
+    left  = [ page - window, 1 ].max
+    right = [ page + window, pages ].min
+
+    series = [ 1 ]
+    series << :gap if left > 2
+    series.concat(((left..right).to_a - [ 1, pages ]))
+    series << :gap if right < pages - 1
+    series << pages
+    series
+  end
 
   def parse_json_like(value)
     return value if value.is_a?(Hash) || value.is_a?(Array)

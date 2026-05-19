@@ -4,7 +4,7 @@ A support operating layer for a two-company venture studio portfolio, built as a
 
 ## Live Demo
 
-Production: `http://147.135.78.29`
+Production: https://supportos.ilyalebe.dev
 
 Two demo companies:
 - **AI Passport Photo** — `/companies/aipassportphoto`
@@ -87,12 +87,12 @@ bin/rails db:seed
 Tests:
 ```bash
 bin/rails test
-# 79 runs, 628 assertions, 0 failures
+# 89 runs, 671 assertions, 0 failures
 ```
 
 ## Deployment
 
-Kamal to a single DigitalOcean server (`147.135.78.29`) with SQLite + persistent storage volume.
+Kamal to a single server (`147.135.78.29`, `supportos.ilyalebe.dev`) with SQLite + a persistent storage volume. The kamal-proxy terminates SSL.
 
 ```bash
 kamal deploy

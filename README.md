@@ -2,6 +2,8 @@
 
 # SupportOS
 
+**Live demo:** https://supportos.ilyalebe.dev
+
 SupportOS is a Rails + Hotwire demo of a shared support layer for multiple startups.
 
 Instead of giving each company its own isolated chatbot or inbox, this app models support as one operational system that can:

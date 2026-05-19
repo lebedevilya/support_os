@@ -26,7 +26,9 @@ module Webhooks
     def call
       return Result.new(:ignored) unless reviewable?
 
-      OpenClaw::AgentHookClient.call(
+      # Enqueue the OpenClaw call so the GitHub webhook request returns
+      # immediately instead of blocking on a long-running agent HTTP call.
+      OpenClawAgentHookJob.perform_later(
         name: "GitHub PR review",
         message: review_message,
         idempotency_key: idempotency_key
