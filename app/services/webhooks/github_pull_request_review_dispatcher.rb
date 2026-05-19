@@ -1,9 +1,7 @@
 module Webhooks
   class GithubPullRequestReviewDispatcher
-    ALLOWED_REPOSITORIES = %w[
-      byhuman-ink/byhuman
-      byhuman-ink/ByHuman-Extension
-    ].freeze
+    # Any repository under this GitHub owner is eligible for automated review.
+    ALLOWED_OWNER = "byhuman-ink".freeze
 
     REVIEW_ACTIONS = %w[
       opened
@@ -43,7 +41,7 @@ module Webhooks
 
     def reviewable?
       REVIEW_ACTIONS.include?(action) &&
-        ALLOWED_REPOSITORIES.include?(repository_full_name) &&
+        repository_owner == ALLOWED_OWNER &&
         pull_request.present? &&
         !pull_request.fetch("draft", false)
     end
@@ -54,6 +52,10 @@ module Webhooks
 
     def repository_full_name
       payload.dig("repository", "full_name").to_s
+    end
+
+    def repository_owner
+      repository_full_name.split("/").first.to_s
     end
 
     def pull_request
