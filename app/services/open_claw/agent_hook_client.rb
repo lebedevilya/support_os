@@ -9,7 +9,9 @@ module OpenClaw
     end
 
     def call(message:, name:, idempotency_key:)
-      token = ENV.fetch("OPENCLAW_HOOKS_TOKEN")
+      token = openclaw_token
+      raise Error, "OpenClaw token is not configured (set credentials.openclaw.hooks_token or ENV OPENCLAW_HOOKS_TOKEN)" if token.blank?
+
       uri = URI(ENV.fetch("OPENCLAW_HOOKS_URL", "http://127.0.0.1:18789/hooks/agent"))
       request = Net::HTTP::Post.new(uri)
       request["Authorization"] = "Bearer #{token}"
@@ -33,6 +35,16 @@ module OpenClaw
       return response if response.is_a?(Net::HTTPSuccess)
 
       raise Error, "OpenClaw hook failed with HTTP #{response.code}: #{response.body}"
+    end
+
+    private
+
+    # ENV wins so tests can override; in production ENV is typically empty
+    # and the token comes from encrypted Rails credentials so it survives
+    # every deploy without a fragile shell-env handshake.
+    def openclaw_token
+      ENV["OPENCLAW_HOOKS_TOKEN"].to_s.presence ||
+        Rails.application.credentials.dig(:openclaw, :hooks_token).to_s
     end
   end
 end
