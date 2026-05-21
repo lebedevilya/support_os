@@ -37,6 +37,9 @@ module Webhooks
       assert_includes call.fetch(:message), "Repository: byhuman-ink/byhuman"
       assert_includes call.fetch(:message), "Pull request: https://github.com/byhuman-ink/byhuman/pull/4"
       assert_includes call.fetch(:message), "Post exactly one concise PR comment"
+      assert_includes call.fetch(:message), "export GH_TOKEN=test-installation-token"
+      refute_includes call.fetch(:message), "__GH_TOKEN__"
+      assert_equal [ { installation_id: 555, repository_id: 999 } ], token_calls
     end
 
     private
@@ -48,14 +51,24 @@ module Webhooks
       OpenClaw::AgentHookClient.define_singleton_method(:call) do |**kwargs|
         calls << kwargs
       end
+
+      @token_calls = []
+      @original_token = Github::AppToken.method(:installation_token)
+      token_calls = @token_calls
+      Github::AppToken.define_singleton_method(:installation_token) do |**kwargs|
+        token_calls << kwargs.slice(:installation_id).merge(repository_id: Array(kwargs[:repository_ids]).first)
+        { token: "test-installation-token", expires_at: nil }
+      end
     end
 
     def teardown
       original_call = @original_call
       OpenClaw::AgentHookClient.define_singleton_method(:call) { |**kwargs| original_call.call(**kwargs) }
+      original_token = @original_token
+      Github::AppToken.define_singleton_method(:installation_token) { |**kwargs| original_token.call(**kwargs) }
     end
 
-    attr_reader :calls
+    attr_reader :calls, :token_calls
 
     def dispatch(payload)
       # The dispatcher enqueues OpenClawAgentHookJob; run it inline so the
@@ -70,7 +83,11 @@ module Webhooks
     def payload(action: "opened", repository: "byhuman-ink/byhuman", draft: false)
       {
         "action" => action,
+        "installation" => {
+          "id" => 555
+        },
         "repository" => {
+          "id" => 999,
           "full_name" => repository
         },
         "pull_request" => {

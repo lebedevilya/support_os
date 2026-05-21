@@ -26,10 +26,14 @@ module Webhooks
 
       # Enqueue the OpenClaw call so the GitHub webhook request returns
       # immediately instead of blocking on a long-running agent HTTP call.
+      # The job mints the GitHub App installation token at perform time and
+      # substitutes it into the message — keeping the token out of the
+      # serialized job arguments and Rails logs.
       OpenClawAgentHookJob.perform_later(
         name: "GitHub PR review",
         message: review_message,
-        idempotency_key: idempotency_key
+        idempotency_key: idempotency_key,
+        github_app: github_app_arguments
       )
 
       Result.new(:dispatched)
@@ -83,6 +87,17 @@ module Webhooks
       ].join(":")
     end
 
+    def github_app_arguments
+      installation_id = payload.dig("installation", "id") ||
+        Rails.application.credentials.dig(:github_app, :installation_id)
+      return nil unless installation_id
+
+      {
+        installation_id: installation_id,
+        repository_id: payload.dig("repository", "id")
+      }
+    end
+
     def review_message
       <<~TEXT
         Review this GitHub pull request and post the result back to the PR.
@@ -94,6 +109,12 @@ module Webhooks
         Base branch: #{pull_request.dig("base", "ref")}
         Head branch: #{pull_request.dig("head", "ref")}
         Head SHA: #{head_sha}
+
+        Before running any gh commands, authenticate with this short-lived (1 hour)
+        GitHub App installation token. It is scoped to this repository only and
+        identifies you as the App "boris-reviewer":
+
+          export GH_TOKEN=__GH_TOKEN__
 
         Use the github skill or gh CLI to inspect the PR diff, changed files, existing comments, and CI state.
         Focus on bugs, regressions, security/privacy issues, data-loss risks, missing tests, and deployment risks.
