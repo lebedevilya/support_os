@@ -38,8 +38,9 @@ env:
     OPENCLAW_HOOKS_URL: "http://172.18.0.1:18789/hooks/agent"
   secret:
     - RAILS_MASTER_KEY
-    - GITHUB_WEBHOOK_SECRET
-    - OPENCLAW_HOOKS_TOKEN
+    # GITHUB_WEBHOOK_SECRET and OPENCLAW_HOOKS_TOKEN are stored in encrypted
+    # Rails credentials, not in shell env. See app/controllers/webhooks/...
+    # and app/services/open_claw/agent_hook_client.rb.
 
 ssh:
   user: debian
